@@ -1,0 +1,145 @@
+batch_size: 1
+iters: 296960   # 160 epochs
+
+model:
+  type: FUTR3D
+  use_grid_mask: True
+  use_LiDAR: False
+  use_Radar: True
+  use_Cam: True
+  backbone:
+    type: ResNet
+    layers: 101
+    return_idx: [0, 1, 2, 3]
+    dcn_v2: True
+    stage_with_dcn: [False, False, True, True]
+    output_stride: None
+    frozen_stages: 1
+    frozen_norm: True
+    preprocess: False
+  neck:
+    type: FUTRFPN
+    in_channels: [256, 512, 1024, 2048]
+    out_channels: 256
+    start_level: 1
+    add_extra_convs: 'on_output'
+    num_outs: 4
+    relu_before_extra_convs: True
+  radar_encoder:
+    type: RadarPointEncoder
+    in_channels: 13
+    out_channels: [ 32, 32, 64 ]
+  head:
+    type: DeformableFUTR3DHead
+    num_query: 600
+    num_classes: 10
+    in_channels: 256
+    embed_dims: 256
+    with_box_refine: True
+    as_two_stage: False
+    code_size: 10
+    code_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
+    num_cls_fcs: 2
+    num_reg_fcs: 2
+    pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+    transformer:
+      type: FUTR3DTransformer
+      transformer_decoder:
+        type: FUTR3DTransformerDecoder
+        num_layers: 6
+        return_intermediate: True
+        transformer_layers:
+          type: DetrTransformerDecoderLayer
+          embed_dims: 256
+          num_heads: 8
+          dropout: 0.1
+          attn_dropout: 0.1
+          use_LiDAR: False
+          use_Cam: True
+          use_Radar: True
+          num_levels: 4
+          num_cams: 6
+          radar_dims: 64
+          radar_topk: 30
+          im2col_step: 64
+          use_dconv: True
+          feedforward_channels: 512
+          feedforward_dropout: 0.1
+          normalize_before: False
+          pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+    bbox_coder:
+      type: NMSFreeCoder
+      post_center_range: [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0]
+      pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+      max_num: 300
+      voxel_size: [0.1, 0.1, 0.2]
+      num_classes: 10
+
+train_dataset:
+  type: NuscenesModlityDataset
+  dataset_root: ./data/nuscenes
+  anno_file: ./data/nuscenes/radar_nuscenes_5sweeps_infos_val.pkl
+  transforms:
+    # img transforms
+    - type: LoadMultiViewImageFromFiles
+      to_float32: True
+    - type: NormalizeMultiviewImage
+      mean: [103.530, 116.280, 123.675]
+      std: [1.0, 1.0, 1.0]
+    - type: PadMultiViewImage
+      size_divisor: 32
+    # radar transforms
+    - type: LoadRadarPointsMultiSweeps
+      load_dim: 18
+      # x y z rcs vx_comp vy_comp x_rms y_rms vx_rms vy_rms
+      use_dim: [0, 1, 2, 5, 6, 7, 8, 9, 12, 13, 16, 17, 18]
+      sweeps_num: 4
+      max_num: 1200
+    - type: Collect3D
+      key: ['img', 'radar']
+
+
+val_dataset:
+  type: NuscenesModlityDataset
+  dataset_root: ./data/nuscenes
+  anno_file: ./data/nuscenes/radar_nuscenes_5sweeps_infos_val.pkl
+  transforms:
+    # img transforms
+    - type: LoadMultiViewImageFromFiles
+      to_float32: True
+    - type: NormalizeMultiviewImage
+      mean: [103.530, 116.280, 123.675]
+      std: [1.0, 1.0, 1.0]
+    - type: PadMultiViewImage
+      size_divisor: 32
+    # radar transforms
+    - type: LoadRadarPointsMultiSweeps
+      load_dim: 18
+      # x y z rcs vx_comp vy_comp x_rms y_rms vx_rms vy_rms
+      use_dim: [ 0, 1, 2, 5, 6, 7, 8, 9, 12, 13, 16, 17, 18 ]
+      sweeps_num: 4
+      max_num: 1200
+    - type: Collect3D
+      key: ['img', 'radar']
+
+lr_scheduler:
+  type: OneCycleWarmupDecayLr
+  base_learning_rate: 0.0001
+  lr_ratio_peak: 10
+  lr_ratio_trough: 0.0001
+
+  step_ratio_peak: 0.4
+
+optimizer:
+  type: Adam
+  weight_decay: 0.0001
+  grad_clip:
+    type: ClipGradByGlobalNorm
+    clip_norm: 10.0
+
+
+
+
+
+
+
