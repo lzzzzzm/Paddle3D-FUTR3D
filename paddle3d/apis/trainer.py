@@ -24,6 +24,7 @@ from paddle3d.apis.pipeline import training_step, validation_step
 from paddle3d.apis.scheduler import Scheduler, SchedulerABC
 from paddle3d.utils.logger import logger
 from paddle3d.utils.timer import Timer
+import numpy as np
 import pickle
 
 def save_variable(v,filename):
@@ -301,11 +302,13 @@ class Trainer:
         if self.val_dataset is None:
             raise RuntimeError('No evaluation dataset specified!')
         msg = 'evaluate on validate dataset'
-        # metric_obj = self.val_dataset.metric
 
         for idx, sample in logger.enumerate(self.eval_dataloader, msg=msg):
-            result = validation_step(self.model, sample)
+            if 'data/nuscenes/samples/CAM_FRONT/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151603512404.jpg' in sample['img_meta'][0]['img_filename']:
+                print('check')
+                result = validation_step(self.model, sample)
             # metric_obj.update(predictions=result, ground_truths=sample)
 
         # metrics = metric_obj.compute(verbose=True)
+        # metric_obj = self.val_dataset.metric
         # return metrics

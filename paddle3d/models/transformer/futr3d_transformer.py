@@ -81,9 +81,17 @@ class DetrTransformerDecoderLayer(nn.Layer):
         act_dropout = dropout if feedforward_dropout is None else feedforward_dropout
 
         # attn
-        self.self_attn = MultiHeadAttention(embed_dim=embed_dims,
-                                            num_heads=num_heads,
-                                            dropout=attn_dropout)
+        # self.self_attn = MultiHeadAttention(
+        #     embed_dim=self.embed_dims,
+        #     num_heads=self.num_heads,
+        #     attn_drop=attn_dropout,
+        #     proj_drop=act_dropout
+        # )
+        self.self_attn = MultiHeadAttention(
+            embed_dim=self.embed_dims,
+            num_heads=self.num_heads,
+            attn_drop=attn_dropout
+        )
 
         self.cross_attn = FUTR3DCrossAtten(use_LiDAR=use_LiDAR,
                                            use_Cam=use_Cam,
@@ -106,11 +114,8 @@ class DetrTransformerDecoderLayer(nn.Layer):
             [nn.Linear(in_features=embed_dims, out_features=feedforward_channels),
              nn.Linear(in_features=feedforward_channels, out_features=embed_dims)]
         )
-        # self.ffn1 = nn.Linear(in_features=embed_dims,
-        #                          out_features=feedforward_channels)
+        # ffn dropout
         self.dropout1 = nn.Dropout(act_dropout, mode="upscale_in_train")
-        # self.ffn2 = nn.Linear(in_features=feedforward_channels,
-        #                          out_features=embed_dims)
         self.dropout2 = nn.Dropout(act_dropout, mode="upscale_in_train")
         # norms
         self.norms = nn.LayerList(
@@ -161,7 +166,7 @@ class DetrTransformerDecoderLayer(nn.Layer):
                                query_pos=query_pos,
                                key_pos=query_pos,
                                attn_mask=self_attn_masks,
-                               key_padding_mask=query_key_padding_mask
+                               key_padding_mask=query_key_padding_mask,
                                )
         # norm
         query = self.norms[0](query)
@@ -189,24 +194,59 @@ class DetrTransformerDecoderLayer(nn.Layer):
         query = self.ffns[1](self.dropout1(self.activation(self.ffns[0](query))))
         query = residual + self.dropout2(query)
         # norm
-        query = self.self.norms[2](query)
+        query = self.norms[2](query)
         return query
 
 
 @manager.TRANSFORMER_DECODER.add_component
 class FUTR3DTransformerDecoder(nn.Layer):
     def __init__(self,
+                 use_LiDAR=False,
+                 use_Radar=True,
+                 use_Cam=True,
+                 num_levels=4,
                  num_layers=6,
                  return_intermediate=True,
-                 transformer_layers=None,
+                 embed_dims=256,
+                 num_heads=8,
+                 dropout=0.1,
+                 attn_dropout=0.1,
+                 num_cams=6,
+                 radar_dims=64,
+                 radar_topk=30,
+                 im2col_step=64,
+                 use_dconv=True,
+                 feedforward_channels=512,
+                 feedforward_dropout=0.1,
+                 normalize_before=False,
+                 pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
                  ):
         super(FUTR3DTransformerDecoder, self).__init__()
         self.return_intermediate = return_intermediate
         self.num_layers = num_layers
-
         self.layers = nn.LayerList()
         for i in range(num_layers):
-            self.layers.append(transformer_layers)
+            self.layers.append(
+                DetrTransformerDecoderLayer(
+                    embed_dims=embed_dims,
+                    num_heads=num_heads,
+                    dropout=dropout,
+                    attn_dropout= attn_dropout,
+                    use_LiDAR= use_LiDAR,
+                    use_Cam=use_Cam,
+                    use_Radar= use_Radar,
+                    num_levels=num_levels,
+                    num_cams= num_cams,
+                    radar_dims= radar_dims,
+                    radar_topk= radar_topk,
+                    im2col_step= im2col_step,
+                    use_dconv= use_dconv,
+                    feedforward_channels= feedforward_channels,
+                    feedforward_dropout= feedforward_dropout,
+                    normalize_before=normalize_before,
+                    pc_range=pc_range
+                )
+            )
         self.embed_dims = self.layers[0].embed_dims
 
     def forward(self,
@@ -226,12 +266,12 @@ class FUTR3DTransformerDecoder(nn.Layer):
             reference_points_input = reference_points
             output = layer(
                 query=output,
+                query_pos=query_pos,
                 reference_points=reference_points_input,
                 img_feats=img_feats,
                 rad_feats=rad_feats,
                 img_metas=img_metas
             )
-            print('decoder output:', output.shape)
             output = paddle.transpose(output, (1, 0, 2))
             if reg_branches is not None:
                 tmp = reg_branches[lid](output)

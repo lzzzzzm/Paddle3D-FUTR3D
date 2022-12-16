@@ -27,7 +27,7 @@ from pyquaternion import Quaternion
 import paddle
 from paddle3d.apis import manager
 from paddle3d.datasets import BaseDataset
-from paddle3d.sample import ModlitySample
+from paddle3d.sample import ModlitySample, Sample
 import paddle3d.transforms as T
 from paddle3d.transforms.reader import LoadMultiViewImageFromFiles, Collect3D
 from paddle3d.transforms.normalize import NormalizeMultiviewImage
@@ -112,6 +112,8 @@ class NuscenesModlityDataset(BaseDataset):
                 gt_labels_3d.append(-1)
         gt_labels_3d = np.array(gt_labels_3d)
         sample.labels = gt_labels_3d
+        sample.bboxes_3d = gt_bboxes_3d
+
         return sample
 
     def get_data_info(self, index):
@@ -163,19 +165,11 @@ class NuscenesModlityDataset(BaseDataset):
 
         return modlity_sample
 
-    def prepare_test_data(self, index):
-        pass
 
-    def prepare_train_data(self, index):
+    def __getitem__(self, index):
         modlity_sample = self.get_data_info(index)
         modlity_sample = self.transforms(modlity_sample)
         return modlity_sample
-
-    def __getitem__(self, index):
-        if self.is_test_mode:
-            return self.prepare_test_data(index)
-        else:
-            return self.prepare_train_data(index)
 
     def __len__(self):
         return len(self.data_infos)
@@ -187,11 +181,11 @@ class NuscenesModlityDataset(BaseDataset):
         if self.use_modality['use_camera']:
             sample.img = paddle.stack([batch[i].img for i in range(len(batch))], axis=0)
             for i in range(len(batch)):
-                sample.img_meta.append(batch[i].img_meta)
+                sample.img_meta.append(*batch[i].img_meta)
         # radar batch
         if self.use_modality['use_radar']:
             sample.radar = paddle.concat([batch[i].radar for i in range(len(batch))], axis=0)
-
+        # label
         return sample
 
 

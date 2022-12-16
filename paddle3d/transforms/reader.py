@@ -79,6 +79,10 @@ class Collect3D(TransformABC):
             collect_sample.img_meta = sample.img_meta
         if 'radar' in self.key:
             collect_sample.radar = self.to_tensor(sample.radar)
+        # collect label
+        if sample.labels is not None:
+            collect_sample.labels = sample.labels
+            collect_sample.bboxes_3d = sample.bboxes_3d
 
         return collect_sample
 

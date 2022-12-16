@@ -1,10 +1,13 @@
 import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
+from paddle.distributed import reduce
 
 import copy
+from functools import partial
 
 from paddle3d.models.transformer.attention import inverse_sigmoid
+from paddle3d.models.detection.futr3d.futr3d_utils import normalize_bbox, nan_to_num
 from paddle3d.apis import manager
 
 __all__ = ["DeformableFUTR3DHead"]
@@ -164,3 +167,124 @@ class DeformableFUTR3DHead(nn.Layer):
         # print('outs[all_bbox_preds] shape:', outs['all_bbox_preds'].shape)
         # Test forward
         return outs
+
+    def multi_apply(self, func, *args, **kwargs):
+        pfunc = partial(func, **kwargs) if kwargs else func
+        map_results = map(pfunc, *args)
+        return tuple(map(list, zip(*map_results)))
+
+    def get_targets(self,
+                    cls_scores_list,
+                    bbox_preds_list,
+                    gt_bboxes_list,
+                    gt_labels_list,
+                    gt_bboxes_ignore_list=None):
+        assert gt_bboxes_ignore_list is None, \
+            'Only supports for gt_bboxes_ignore setting to None.'
+        num_imgs = len(cls_scores_list)
+        gt_bboxes_ignore_list = [
+            gt_bboxes_ignore_list for _ in range(num_imgs)
+        ]
+
+        (labels_list, label_weights_list, bbox_targets_list,
+         bbox_weights_list, pos_inds_list, neg_inds_list) = self.multi_apply(
+             self._get_target_single, cls_scores_list, bbox_preds_list,
+             gt_bboxes_list, gt_labels_list, gt_bboxes_ignore_list)
+        num_total_pos = sum((paddle.numel(inds) for inds in pos_inds_list))
+        num_total_neg = sum((paddle.numel(inds) for inds in neg_inds_list))
+        return (labels_list, label_weights_list, bbox_targets_list,
+                bbox_weights_list, num_total_pos, num_total_neg)
+
+    def loss_single(self,
+                    cls_scores,
+                    bbox_preds,
+                    gt_bboxes_list,
+                    gt_labels_list,
+                    gt_bboxes_ignore_list=None):
+        num_imgs = cls_scores.shape[0]
+        cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
+        bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]
+        cls_reg_targets = self.get_targets(cls_scores_list, bbox_preds_list,
+                                           gt_bboxes_list, gt_labels_list, gt_bboxes_ignore_list)
+        (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
+         num_total_pos, num_total_neg) = cls_reg_targets
+        labels = paddle.concat(labels_list, 0)
+        label_weights = paddle.concat(label_weights_list, 0)
+        bbox_targets = paddle.concat(bbox_targets_list, 0)
+        bbox_weights = paddle.concat(bbox_weights_list, 0)
+        # classification loss
+        cls_scores = cls_scores.reshape((-1, self.cls_out_channels))
+        # construct weighted avg_factor to match with the official DETR repo
+        cls_avg_factor = num_total_pos * 1.0 + \
+                         num_total_neg * self.bg_cls_weight
+        if self.sync_cls_avg_factor:
+            cls_avg_factor = reduce(
+                cls_scores.new_tensor([cls_avg_factor]))
+
+        cls_avg_factor = max(cls_avg_factor, 1)
+        loss_cls = self.loss_cls(
+            cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
+
+        # Compute the average number of gt boxes accross all gpus, for
+        # normalization purposes
+        num_total_pos = paddle.to_tensor(loss_cls)
+        num_total_pos = paddle.clip(reduce(num_total_pos), min=1).item()
+        # regression L1 loss
+        bbox_preds = bbox_preds.reshape((-1, bbox_preds.shape[-1]))
+        normalized_bbox_targets = normalize_bbox(bbox_targets, self.pc_range)
+        isnotnan = paddle.isfinite(normalized_bbox_targets).all(dim=-1)
+        bbox_weights = bbox_weights * self.code_weights
+        loss_bbox = self.loss_bbox(
+                bbox_preds[isnotnan, :self.code_size],
+                normalized_bbox_targets[isnotnan, :self.code_size],
+                bbox_weights[isnotnan, :self.code_size], avg_factor=num_total_pos)
+
+        loss_cls = nan_to_num(loss_cls)
+        loss_bbox = nan_to_num(loss_bbox)
+        return loss_cls, loss_bbox
+
+    def loss(self,
+             gt_bboxes_list,
+             gt_labels_list,
+             preds_dicts,
+             gt_bboxes_ignore=None):
+
+        all_cls_scores = preds_dicts['all_cls_scores']
+        all_bbox_preds = preds_dicts['all_bbox_preds']
+        enc_cls_scores = preds_dicts['enc_cls_scores']
+        enc_bbox_preds = preds_dicts['enc_bbox_preds']
+        num_dec_layers = len(all_cls_scores)
+        gt_bboxes_list = [paddle.concat((gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),axis=1) for gt_bboxes in gt_bboxes_list]
+        all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
+        all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
+        all_gt_bboxes_ignore_list = [
+            gt_bboxes_ignore for _ in range(num_dec_layers)
+        ]
+        losses_cls, losses_bbox = self.multi_apply(
+            self.loss_single, all_cls_scores, all_bbox_preds,
+            all_gt_bboxes_list, all_gt_labels_list,
+            all_gt_bboxes_ignore_list)
+
+        loss_dict = dict()
+        if enc_cls_scores is not None:
+            binary_labels_list = [
+                paddle.zeros_like(gt_labels_list[i])
+                for i in range(len(all_gt_labels_list))
+            ]
+            enc_loss_cls, enc_losses_bbox = \
+                self.loss_single(enc_cls_scores, enc_bbox_preds,
+                                 gt_bboxes_list, binary_labels_list, gt_bboxes_ignore)
+            loss_dict['enc_loss_cls'] = enc_loss_cls
+            loss_dict['enc_loss_bbox'] = enc_losses_bbox
+
+        # loss from the last decoder layer
+        loss_dict['loss_cls'] = losses_cls[-1]
+        loss_dict['loss_bbox'] = losses_bbox[-1]
+        # loss from other decoder layers
+        num_dec_layer = 0
+        for loss_cls_i, loss_bbox_i in zip(losses_cls[:-1],
+                                           losses_bbox[:-1]):
+            loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
+            loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
+            num_dec_layer += 1
+        return loss_dict

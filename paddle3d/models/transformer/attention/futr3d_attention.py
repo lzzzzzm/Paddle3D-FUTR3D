@@ -2,8 +2,25 @@ import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
 
+from paddle3d.models.transformer.attention.multiheadattention import  MultiHeadSelfAttention
+from paddle3d.models.detection.futr3d.futr3d_utils import nan_to_num
+
 import numpy as np
 from scipy.spatial.distance import cdist
+import pickle
+
+
+def save_variable(v, filename):
+    f = open(filename, 'wb')
+    pickle.dump(v, f)
+    f.close()
+    return filename
+
+def load_variavle(filename):
+   f=open(filename,'rb')
+   r=pickle.load(f)
+   f.close()
+   return r
 
 
 def convert_attention_mask(attn_mask, dtype):
@@ -42,51 +59,10 @@ def inverse_sigmoid(x, eps=1e-5):
     """
     x = paddle.clip(x, min=0, max=1)
     x1 = paddle.clip(x, min=eps)
-    x2 = paddle.clip((1-x), min=eps)
+    x2 = paddle.clip((1 - x), min=eps)
     return paddle.log(x1 / x2)
 
 
-def nan_to_num(x, nan=0.0, posinf=None, neginf=None, name=None):
-    """
-    Replaces NaN, positive infinity, and negative infinity values in input tensor.
-    Args:
-        x (Tensor): An N-D Tensor, the data type is float32, float64.
-        nan (float, optional): the value to replace NaNs with. Default is 0.
-        posinf (float, optional): if a Number, the value to replace positive infinity values with. If None, positive infinity values are replaced with the greatest finite value representable by input’s dtype. Default is None.
-        neginf (float, optional): if a Number, the value to replace negative infinity values with. If None, negative infinity values are replaced with the lowest finite value representable by input’s dtype. Default is None.
-        name (str, optional): Name for the operation (optional, default is None). For more information, please refer to :ref:`api_guide_Name`.
-    Returns:
-        Tensor: Results of nan_to_num operation input Tensor ``x``.
-    Examples:
-        .. code-block:: python
-            import paddle
-            x = paddle.to_tensor([float('nan'), 0.3, float('+inf'), float('-inf')], dtype='float32')
-            out1 = paddle.nan_to_num(x)  # [0, 0.3, 3.4028235e+38, -3.4028235e+38]
-            out2 = paddle.nan_to_num(x, nan=1)  # [1, 0.3, 3.4028235e+38, -3.4028235e+38]
-            out3 = paddle.nan_to_num(x, posinf=5)  # [0, 0.3, 5, -3.4028235e+38]
-            out4 = paddle.nan_to_num(x, nan=10, neginf=-99)  # [10, 0.3, 3.4028235e+38, -99]
-    """
-    # NOTE(tiancaishaonvjituizi): it seems that paddle handles the dtype of python float number
-    # incorrectly, so we have to explicitly contruct tensors here
-    posinf_value = paddle.full_like(x, float("+inf"))
-    neginf_value = paddle.full_like(x, float("-inf"))
-    nan = paddle.full_like(x, nan)
-    assert x.dtype in [paddle.float32, paddle.float64]
-    is_float32 = x.dtype == paddle.float32
-    if posinf is None:
-        posinf = (
-            np.finfo(np.float32).max if is_float32 else np.finfo(np.float64).max
-        )
-    posinf = paddle.full_like(x, posinf)
-    if neginf is None:
-        neginf = (
-            np.finfo(np.float32).min if is_float32 else np.finfo(np.float64).min
-        )
-    neginf = paddle.full_like(x, neginf)
-    x = paddle.where(paddle.isnan(x), nan, x)
-    x = paddle.where(x == posinf_value, posinf, x)
-    x = paddle.where(x == neginf_value, neginf, x)
-    return x
 
 def gather(feature: paddle.Tensor, ind: paddle.Tensor):
     """Simplified version of torch.gather. Always gather based on axis 1.
@@ -104,6 +80,13 @@ def gather(feature: paddle.Tensor, ind: paddle.Tensor):
 
     return feature.gather_nd(ind)
 
+def pairwise_dist (A, B):
+    A2 = (A ** 2).sum(axis=1).reshape((-1, 1))
+    B2 = (B ** 2).sum(axis=1)
+    D = A2 + B2 - 2 * A.mm(B.transpose((1, 0)))
+    D = D.sqrt()
+    return D
+
 
 def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = []
@@ -114,9 +97,11 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
     # lidar2img = reference_points.new_tensor(lidar2img)  # (B, N, 4, 4)
     reference_points_3d = reference_points.clone()
+    reference_points = reference_points.numpy()
     reference_points[..., 0:1] = reference_points[..., 0:1] * (pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2] * (pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3] * (pc_range[5] - pc_range[2]) + pc_range[2]
+    reference_points = paddle.to_tensor(reference_points)
     B, num_query = reference_points.shape[:2]
 
     # reference_points (B, num_queries, 4)
@@ -129,8 +114,10 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = paddle.reshape(lidar2img, shape=(B, num_cam, 1, 4, 4)).tile([1, 1, num_query, 1, 1])
     # lidar2img = paddle.repeat_interleave(lidar2img, (1, 1, num_query, 1, 1))
     # ref_point_cam change to (B, num_cam, num_query, 4)
-    reference_points_cam = paddle.matmul(lidar2img, reference_points)
-    reference_points_cam = paddle.squeeze(reference_points_cam, -1)
+    reference_points_cam = paddle.matmul(lidar2img, reference_points).squeeze(-1)
+    # save_variable(lidar2img.numpy(), 'lidar2img.txt')
+    # save_variable(reference_points_cam.numpy(), 'reference_points_cam.txt')
+
     eps = 1e-5
     mask = (reference_points_cam[..., 2:3] > eps)
     # ref_point_cam change to img coordinates
@@ -151,6 +138,9 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # mask = nan_to_num(mask)
     sampled_feats = []
     num_points = 1
+    # save_variable(reference_points_cam.numpy(), 'reference_points_cam.txt')
+    reference_points_cam = load_variavle('reference_points_cam.txt')
+    reference_points_cam = paddle.to_tensor(reference_points_cam)
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
         # feat_flip = paddle.flip(feat, [-1])
@@ -163,189 +153,58 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         # sampled_feat shape (B, C, num_query, N, num_points)
         sampled_feat = paddle.reshape(sampled_feat, shape=(B, N, C, num_query, num_points))
         sampled_feat = paddle.transpose(sampled_feat, (0, 2, 3, 1, 4))
+        save_variable(sampled_feat.numpy(), 'sampled_feat.txt')
         sampled_feats.append(sampled_feat)
+
     sampled_feats = paddle.stack(sampled_feats, -1)
     # sampled_feats (B, C, num_query, num_cam, num_points, len(lvl_feats))
     sampled_feats = paddle.reshape(sampled_feats, shape=(B, C, num_query, num_cam, num_points, len(mlvl_feats)))
-
+    save_variable(sampled_feats.numpy(), 'sampled_feats.txt')
     # ref_point_3d (B, N, num_query, 3)  maks (B, N, num_query, 1)
     return reference_points_3d, sampled_feats, mask
 
+
 class MultiHeadAttention(nn.Layer):
-    """
-    Attention mapps queries and a set of key-value pairs to outputs, and
-    Multi-Head Attention performs multiple parallel attention to jointly attending
-    to information from different representation subspaces.
-
-    Please refer to `Attention Is All You Need <https://arxiv.org/pdf/1706.03762.pdf>`_
-    for more details.
-
-    Parameters:
-        embed_dim (int): The expected feature size in the input and output.
-        num_heads (int): The number of heads in multi-head attention.
-        dropout (float, optional): The dropout probability used on attention
-            weights to drop some attention targets. 0 for no dropout. Default 0
-        kdim (int, optional): The feature size in key. If None, assumed equal to
-            `embed_dim`. Default None.
-        vdim (int, optional): The feature size in value. If None, assumed equal to
-            `embed_dim`. Default None.
-        need_weights (bool, optional): Indicate whether to return the attention
-            weights. Default False.
-
-    Examples:
-
-        .. code-block:: python
-
-            import paddle
-
-            # encoder input: [batch_size, sequence_length, d_model]
-            query = paddle.rand((2, 4, 128))
-            # self attention mask: [batch_size, num_heads, query_len, query_len]
-            attn_mask = paddle.rand((2, 2, 4, 4))
-            multi_head_attn = paddle.nn.MultiHeadAttention(128, 2)
-            output = multi_head_attn(query, None, None, attn_mask=attn_mask)  # [2, 4, 128]
-    """
-
     def __init__(self,
                  embed_dim,
                  num_heads,
-                 dropout=0.,
-                 kdim=None,
-                 vdim=None,
-                 need_weights=False):
+                 attn_drop=0.,
+                 proj_drop=0.):
         super(MultiHeadAttention, self).__init__()
-        self.embed_dim = embed_dim
-        self.kdim = kdim if kdim is not None else embed_dim
-        self.vdim = vdim if vdim is not None else embed_dim
-        self._qkv_same_embed_dim = self.kdim == embed_dim and self.vdim == embed_dim
+        self.proj_drop = nn.Dropout(proj_drop)
 
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.need_weights = need_weights
+        self.attn = MultiHeadSelfAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads
+        )
 
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+    def forward(self,
+                query,
+                key=None,
+                value=None,
+                identity=None,
+                query_pos=None,
+                key_pos=None,
+                attn_mask=None,
+                key_padding_mask=None):
+        if key is None:
+            key = query
+        if value is None:
+            value = key
+        if identity is None:
+            identity = query
+        if key_pos is None:
+            if query_pos is not None:
+                # use query_pos if key_pos is not available
+                if query_pos.shape == key.shape:
+                    key_pos = query_pos
+        if query_pos is not None:
+            query = query + query_pos
+        if key_pos is not None:
+            key = key + key_pos
+        out = self.attn(query=query, key=key, value=value)
+        return identity + self.proj_drop(out)
 
-        if self._qkv_same_embed_dim:
-            self.in_proj_weight = self.create_parameter(
-                shape=[embed_dim, 3 * embed_dim],
-                attr=None,
-                dtype=self._dtype,
-                is_bias=False)
-            self.in_proj_bias = self.create_parameter(
-                shape=[3 * embed_dim],
-                attr=None,
-                dtype=self._dtype,
-                is_bias=True)
-        else:
-            self.q_proj = nn.Linear(embed_dim, embed_dim)
-            self.k_proj = nn.Linear(self.kdim, embed_dim)
-            self.v_proj = nn.Linear(self.vdim, embed_dim)
-
-        self.out_proj = nn.Linear(embed_dim, embed_dim)
-        self._type_list = ('q_proj', 'k_proj', 'v_proj')
-
-
-
-    # def _reset_parameters(self):
-    #     for p in self.parameters():
-    #         if p.dim() > 1:
-    #             xavier_uniform_(p)
-    #         else:
-    #             constant_(p)
-
-    def compute_qkv(self, tensor, index):
-        if self._qkv_same_embed_dim:
-            tensor = F.linear(
-                x=tensor,
-                weight=self.in_proj_weight[:, index * self.embed_dim:(index + 1)
-                                           * self.embed_dim],
-                bias=self.in_proj_bias[index * self.embed_dim:(index + 1) *
-                                       self.embed_dim]
-                if self.in_proj_bias is not None else None)
-        else:
-            tensor = getattr(self, self._type_list[index])(tensor)
-        tensor = tensor.reshape(
-            [0, 0, self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
-        return tensor
-
-    def forward(self, query, key=None, value=None, attn_mask=None):
-        r"""
-        Applies multi-head attention to map queries and a set of key-value pairs
-        to outputs.
-
-        Parameters:
-            query (Tensor): The queries for multi-head attention. It is a
-                tensor with shape `[batch_size, query_length, embed_dim]`. The
-                data type should be float32 or float64.
-            key (Tensor, optional): The keys for multi-head attention. It is
-                a tensor with shape `[batch_size, key_length, kdim]`. The
-                data type should be float32 or float64. If None, use `query` as
-                `key`. Default None.
-            value (Tensor, optional): The values for multi-head attention. It
-                is a tensor with shape `[batch_size, value_length, vdim]`.
-                The data type should be float32 or float64. If None, use `query` as
-                `value`. Default None.
-            attn_mask (Tensor, optional): A tensor used in multi-head attention
-                to prevents attention to some unwanted positions, usually the
-                paddings or the subsequent positions. It is a tensor with shape
-                broadcasted to `[batch_size, n_head, sequence_length, sequence_length]`.
-                When the data type is bool, the unwanted positions have `False`
-                values and the others have `True` values. When the data type is
-                int, the unwanted positions have 0 values and the others have 1
-                values. When the data type is float, the unwanted positions have
-                `-INF` values and the others have 0 values. It can be None when
-                nothing wanted or needed to be prevented attention to. Default None.
-
-        Returns:
-            Tensor|tuple: It is a tensor that has the same shape and data type \
-                as `query`, representing attention output. Or a tuple if \
-                `need_weights` is True or `cache` is not None. If `need_weights` \
-                is True, except for attention output, the tuple also includes \
-                the attention weights tensor shaped `[batch_size, num_heads, query_length, key_length]`. \
-                If `cache` is not None, the tuple then includes the new cache \
-                having the same type as `cache`, and if it is `StaticCache`, it \
-                is same as the input `cache`, if it is `Cache`, the new cache \
-                reserves tensors concatanating raw tensors with intermediate \
-                results of current query.
-        """
-        identity = query
-        key = query if key is None else key
-        value = query if value is None else value
-        # compute q ,k ,v
-        q, k, v = (self.compute_qkv(t, i)
-                   for i, t in enumerate([query, key, value]))
-
-        # scale dot product attention
-        product = paddle.matmul(x=q, y=k, transpose_y=True)
-        scaling = float(self.head_dim)**-0.5
-        product = product * scaling
-
-        if attn_mask is not None:
-            # Support bool or int mask
-            attn_mask = convert_attention_mask(attn_mask, product.dtype)
-            product = product + attn_mask
-        weights = F.softmax(product)
-        if self.dropout:
-            weights = F.dropout(
-                weights,
-                self.dropout,
-                training=self.training,
-                mode="upscale_in_train")
-
-        out = paddle.matmul(weights, v)
-
-        # combine heads
-        out = paddle.transpose(out, perm=[0, 2, 1, 3])
-        out = paddle.reshape(x=out, shape=[0, 0, out.shape[2] * out.shape[3]])
-
-        # project to output
-        out = self.out_proj(out)
-
-        outs = [out]
-        if self.need_weights:
-            outs.append(weights)
-        return out + identity
 
 class FUTR3DCrossAtten(nn.Layer):
     def __init__(self,
@@ -443,6 +302,7 @@ class FUTR3DCrossAtten(nn.Layer):
                 pts_feats=None,
                 rad_feats=None,
                 img_metas=None):
+        # save_variable(query.numpy(), 'self_attn.txt')
 
         if key is None:
             key = query
@@ -460,7 +320,9 @@ class FUTR3DCrossAtten(nn.Layer):
             # (B, 1, num_query, num_cams, num_points, num_levels)
             img_attention_weights = self.attention_weights(query)
             img_attention_weights = paddle.reshape(img_attention_weights,
-                                                   shape=(bs, 1, num_query, self.num_cams, self.num_points, self.num_levels))
+                                                   shape=(
+                                                       bs, 1, num_query, self.num_cams, self.num_points,
+                                                       self.num_levels))
 
             reference_points_3d, img_output, mask = feature_sampling(
                 img_feats, reference_points, self.pc_range, img_metas)
@@ -482,13 +344,18 @@ class FUTR3DCrossAtten(nn.Layer):
             ref_xy = reference_points[:, :, :2]
             radar_feats = radar_feats[:, :, 2:]
             pad_xy = paddle.ones_like(radar_xy) * 1000.0
-            temp_radar_mask = (1.0 - paddle.unsqueeze(radar_mask, -1))*pad_xy
+            temp_radar_mask = (1.0 - paddle.unsqueeze(radar_mask, -1)) * pad_xy
             radar_xy = radar_xy + temp_radar_mask
             # [B, num_query, M]
             ref_radar_dist = []
             for index in range(ref_xy.shape[0]):
                 ref_radar_dist.append(-1.0 * cdist(ref_xy[index], radar_xy[index]))
             ref_radar_dist = paddle.to_tensor(ref_radar_dist, dtype='float32')
+            test1 = ref_radar_dist
+            ref_radar_dist = load_variavle('ref_radar_dist.txt')
+            ref_radar_dist = paddle.to_tensor(ref_radar_dist, dtype='float32')
+            test2 = ref_radar_dist
+            compare = (test1 - test2).max()
             # [B, num_query, topk]
             _value, indices = paddle.topk(ref_radar_dist, self.radar_topk)
             # [B, num_query, M]

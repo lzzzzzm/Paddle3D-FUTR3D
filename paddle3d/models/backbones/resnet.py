@@ -49,15 +49,16 @@ class ConvBNLayer(nn.Layer):
         if dilation != 1 and kernel_size != 3:
             raise RuntimeError("When the dilation isn't 1," \
                 "the kernel_size should be 3.")
+        self.act = act
         self.dcn_v2 = dcn_v2
         self.is_vd_mode = is_vd_mode
-        self.act = act
-        self._pool2d_avg = nn.AvgPool2D(
-            kernel_size=2,
-            stride=2,
-            padding=0,
-            ceil_mode=True,
-            data_format=data_format)
+        if self.is_vd_mode:
+            self._pool2d_avg = nn.AvgPool2D(
+                kernel_size=2,
+                stride=2,
+                padding=0,
+                ceil_mode=True,
+                data_format=data_format)
         if self.dcn_v2:
             self.offset_channel = 2 * kernel_size ** 2
             self.mask_channel = kernel_size ** 2
@@ -101,8 +102,7 @@ class ConvBNLayer(nn.Layer):
             for param in norm_params:
                 param.stop_gradient = True
 
-
-        if self.act:
+        if act:
             self._act = nn.ReLU()
 
     def forward(self, inputs):
@@ -428,6 +428,7 @@ class ResNet(nn.Layer):
                             first_conv=i == 0,
                             is_vd_mode=variant in ['c', 'd'],
                             dilation=dilation_rate,
+                            style=self.style,
                             dcn_v2=dcn_v2,
                             frozen_norm=frozen_norm,
                             data_format=data_format))

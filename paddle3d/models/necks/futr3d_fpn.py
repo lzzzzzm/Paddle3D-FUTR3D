@@ -30,12 +30,10 @@ class ConvModule(nn.Layer):
                               weight_attr=nn.initializer.KaimingNormal(),
                               bias_attr=False)
         self.bn = nn.BatchNorm2D(num_features=out_channels)
-        self.act = nn.ReLU()
 
     def forward(self, inputs):
         out = self.conv(inputs)
         out = self.bn(out)
-        out = self.act(out)
         return out
 
 @manager.NECKS.add_component
@@ -104,8 +102,7 @@ class FUTRFPN(nn.Layer):
                  end_level=-1,
                  add_extra_convs=False,
                  relu_before_extra_convs=False,
-                 no_norm_on_lateral=False,
-                 upsample_cfg=dict(mode='nearest')):
+                 no_norm_on_lateral=False):
         super(FUTRFPN, self).__init__()
         assert isinstance(in_channels, list)
         self.in_channels = in_channels
@@ -115,7 +112,6 @@ class FUTRFPN(nn.Layer):
         self.relu_before_extra_convs = relu_before_extra_convs
         self.no_norm_on_lateral = no_norm_on_lateral
         self.fp16_enabled = False
-        self.upsample_cfg = upsample_cfg
 
         if end_level == -1 or end_level == self.num_ins - 1:
             self.backbone_end_level = self.num_ins
@@ -183,14 +179,9 @@ class FUTRFPN(nn.Layer):
         for i in range(used_backbone_levels - 1, 0, -1):
             # In some cases, fixing `scale factor` (e.g. 2) is preferred, but
             #  it cannot co-exist with `size` in `F.interpolate`.
-            if 'scale_factor' in self.upsample_cfg:
-                # fix runtime error of "+=" inplace operation in PyTorch 1.10
-                laterals[i - 1] = laterals[i - 1] + F.interpolate(
-                    laterals[i], **self.upsample_cfg)
-            else:
-                prev_shape = laterals[i - 1].shape[2:]
-                laterals[i - 1] = laterals[i - 1] + F.interpolate(
-                    laterals[i], size=prev_shape, **self.upsample_cfg)
+            prev_shape = laterals[i - 1].shape[2:]
+            laterals[i - 1] = laterals[i - 1] + F.interpolate(
+                laterals[i], size=prev_shape)
 
         # build outputs
         # part 1: from original levels

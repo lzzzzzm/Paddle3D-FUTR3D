@@ -5,7 +5,13 @@ from paddle3d.apis import manager
 from paddle3d.models.detection.futr3d.futr3d_utils import GridMask, bbox3d2result
 
 __all__ = ["FUTR3D"]
-
+# add to record
+import pickle
+def save_variable(v,filename):
+    f=open(filename,'wb')
+    pickle.dump(v,f)
+    f.close()
+    return filename
 
 @manager.MODELS.add_component
 class FUTR3D(nn.Layer):
@@ -54,8 +60,11 @@ class FUTR3D(nn.Layer):
         pass
 
     def extract_feat(self, points, img, radar):
+
         if self.use_Cam:
+            # save_variable(img.numpy(), 'paddle_img.txt')
             img_feats = self.extract_img_feat(img)
+            # save_variable(img_feats, 'paddle_img_feats.txt')
         else:
             img_feats = None
 
@@ -65,7 +74,9 @@ class FUTR3D(nn.Layer):
             pts_feats = None
 
         if self.use_Radar:
+            # save_variable(radar.numpy(), 'paddle_radar.txt')
             rad_feats = self.radar_encoder(radar)
+            # save_variable(rad_feats.numpy(), 'paddle_rad_feats.txt')
         else:
             rad_feats = None
 
@@ -92,7 +103,10 @@ class FUTR3D(nn.Layer):
                                   img_feats=img_feats,
                                   rad_feats=rad_feats,
                                   img_metas=img_metas)
-        pass
+
+        loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
+        losses = self.pts_bbox_head.loss(*loss_inputs)
+        return losses
 
     def forward_mdfs_test(self,
                           pts_feats,

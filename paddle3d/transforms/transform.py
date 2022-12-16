@@ -387,3 +387,6 @@ class PadMultiViewImage(TransformABC):
         """
         sample = self._pad_img(sample)
         return sample
+
+
+
