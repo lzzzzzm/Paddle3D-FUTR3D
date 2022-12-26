@@ -28,7 +28,7 @@ from paddle3d.datasets.semantic_kitti.semantic_kitti import \
     SemanticKITTIDataset
 from paddle3d.geometries import PointCloud, RadarPointCloud
 from paddle3d.geometries.bbox import points_in_convex_polygon_3d_jit
-from paddle3d.sample import Sample, ModlitySample
+from paddle3d.sample import Sample
 from paddle3d.transforms import functional as F
 from paddle3d.transforms.base import TransformABC
 from paddle3d.utils.logger import logger
@@ -36,7 +36,7 @@ from paddle3d.utils.logger import logger
 __all__ = [
     "LoadImage", "LoadMultiViewImageFromFiles",
     "LoadPointCloud", "LoadRadarPointsMultiSweeps", "RemoveCameraInvisiblePointsKITTI",
-    "LoadSemanticKITTIRange",
+    "LoadSemanticKITTIRange", 'ObjectRangeFilter',
     "Collect3D"
 ]
 
@@ -44,7 +44,7 @@ __all__ = [
 @manager.TRANSFORMS.add_component
 class Collect3D(TransformABC):
     """
-        only support ModlitySample
+        only support multimodel sample
         'img': (1) transpose (2) to tensor (3) collect img_meta --- use paddle transform to_tensor
         'radar' (1) to_tensor
     """
@@ -72,17 +72,24 @@ class Collect3D(TransformABC):
         self.to_tensor = T.ToTensor()
 
 
-    def __call__(self, sample: ModlitySample):
-        collect_sample = ModlitySample(self.use_modality)
+    def __call__(self, sample):
+        collect_sample = Sample(path=sample.path, modality=sample.modality)
         if 'img' in self.key:
-            collect_sample.img = paddle.stack([self.to_tensor(img) for img in sample.img])
-            collect_sample.img_meta = sample.img_meta
+            collect_sample['img'] = paddle.stack([self.to_tensor(img) for img in sample.img])
+            collect_sample['img_meta'] = sample.img_meta
+            # collect_sample.img = paddle.stack([self.to_tensor(img) for img in sample.img])
+            # collect_sample.img_meta = sample.img_meta
         if 'radar' in self.key:
-            collect_sample.radar = self.to_tensor(sample.radar)
+            collect_sample['radar'] = self.to_tensor(sample.radar)
+            # collect_sample.radar = self.to_tensor(sample.radar)
         # collect label
         if sample.labels is not None:
             collect_sample.labels = sample.labels
             collect_sample.bboxes_3d = sample.bboxes_3d
+            collect_sample['gravity_center'] = sample.gravity_center
+            # collect_sample.update({
+            #     'gravity_center': sample.gravity_center
+            # })
 
         return collect_sample
 
@@ -135,17 +142,25 @@ class LoadMultiViewImageFromFiles(TransformABC):
 
     def __call__(self, sample):
         """
-         only support ModlitySample
+         only support multimodel sample
         """
-        filename = sample.img_meta[0]['img_filename']
-        # filename = sample.img_meta.img_filename
+        filename = sample.path['image_paths']
         # img is of shape (h, w, c, num_views)
-        img = np.stack(
-            [cv2.imread(name) for name in filename], axis=-1)
+        img = []
+        for name in filename:
+            im = cv2.imread(name)
+            im = cv2.resize(im, (im.shape[0]//4, im.shape[1]//4))
+            img.append(im)
+        img = np.array(img)
+        img = np.transpose(img, (1, 2, 3, 0))
+        # img = np.stack(
+        #     [cv2.imread(name) for name in filename], axis=-1)
+
         if self.to_float32:
             img = img.astype(np.float32)
 
-        sample.img = np.array([img[..., i] for i in range(img.shape[-1])])
+        sample['img'] = np.array([img[..., i] for i in range(img.shape[-1])])
+        # sample.img = np.array([img[..., i] for i in range(img.shape[-1])])
         update_dict = {
             'img_shape' : img.shape,
             'ori_shape' : img.shape,
@@ -153,10 +168,6 @@ class LoadMultiViewImageFromFiles(TransformABC):
             'scale_factor' : 1.0
         }
         sample.img_meta[0].update(update_dict)
-        # sample.img_meta['img_shape'] = img.shape
-        # sample.img_meta['ori_shape'] = img.shape
-        # sample.img_meta['pad_shape'] = img.shape
-        # sample.img_meta['scale_factor'] = 1.0
         return sample
 
 @manager.TRANSFORMS.add_component
@@ -225,8 +236,9 @@ class LoadRadarPointsMultiSweeps(TransformABC):
 
             return points, masks
 
-    def __call__(self, sample: ModlitySample):
-        radars_dict = sample.radar
+    def __call__(self, sample):
+        radars_dict = sample.path['radar_paths']
+        # radars_dict = sample.radar
         points_sweep_list = []
         for key, sweeps in radars_dict.items():
             if len(sweeps) < self.sweeps_num:
@@ -283,7 +295,57 @@ class LoadRadarPointsMultiSweeps(TransformABC):
                            dtype=points.dtype)
 
         points = np.concatenate((points, mask), axis=-1)
-        sample.radar = points.astype(np.float32)
+        sample['radar'] = points.astype(np.float32)
+        # sample.radar = points.astype(np.float32)
+        return sample
+
+@manager.TRANSFORMS.add_component
+class ObjectRangeFilter(TransformABC):
+    def __init__(self, point_cloud_range, bbox_instance, with_gravity_center=False):
+        self.pcd_range = np.array(point_cloud_range, dtype=np.float32)
+        self.bbox_instance = bbox_instance
+        self.with_gravity_center = with_gravity_center
+
+    def __call__(self, sample):
+        """Call function to filter objects by the range.
+
+        Args:
+            sample (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after filtering, 'gt_bboxes_3d', 'gt_labels_3d'
+                keys are updated in the result dict.
+        """
+        # Check points instance type and initialise bev_range
+        if self.bbox_instance == 'LiDARInstance3DBoxes' or self.bbox_instance == 'DepthInstance3DBoxes':
+            bev_range = self.pcd_range[[0, 1, 3, 4]]
+        elif self.bbox_instance == 'CameraInstance3DBoxes':
+            bev_range = self.pcd_range[[0, 2, 3, 5]]
+
+        gt_bboxes_3d = sample['bboxes_3d']
+        gt_labels_3d = sample['labels']
+        if self.with_gravity_center:
+            gravity_center = sample['gravity_center']
+        bev_index = paddle.to_tensor([0, 1, 3, 4, 6])
+        bbox_bev = paddle.index_select(gt_bboxes_3d, bev_index, axis=1)
+        # bbox_bev = gt_bboxes_3d[:, [0, 1, 3, 4, 6]]
+        mask = ((bbox_bev[:, 0] > bev_range[0])
+                          & (bbox_bev[:, 1] > bev_range[1])
+                          & (bbox_bev[:, 0] < bev_range[2])
+                          & (bbox_bev[:, 1] < bev_range[3]))
+
+        gt_bboxes_3d = gt_bboxes_3d[mask]
+        # mask is a torch tensor but gt_labels_3d is still numpy array
+        # using mask to index gt_labels_3d will cause bug when
+        # len(gt_labels_3d) == 1, where mask=1 will be interpreted
+        # as gt_labels_3d[1] and cause out of index error
+        gt_labels_3d = gt_labels_3d[mask.numpy().astype(np.bool)]
+        gravity_center = gravity_center[mask]
+        # limit rad to [-pi, pi]
+        gt_bboxes_3d[:, 6] = gt_bboxes_3d[:, 6] - paddle.floor(gt_bboxes_3d[:, 6] / (2*np.pi) + 0.5) * 2*np.pi
+        sample['bboxes_3d'] = gt_bboxes_3d
+        sample['labels'] = gt_labels_3d
+        sample['gravity_center'] = gravity_center
         return sample
 
 

@@ -16,3 +16,5 @@ from .focal_loss import (FastFocalLoss, FocalLoss, MultiFocalLoss,
                          SigmoidFocalClassificationLoss)
 from .reg_loss import RegLoss
 from .weight_loss import WeightedCrossEntropyLoss, WeightedSmoothL1Loss
+from .match_loss import BBox3DL1Cost
+from .l1_loss import L1Loss

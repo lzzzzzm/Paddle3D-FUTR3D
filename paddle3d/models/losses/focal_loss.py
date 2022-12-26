@@ -17,7 +17,12 @@ import paddle.nn.functional as F
 from paddle import nn
 
 from paddle3d.models.layers.layer_libs import _transpose_and_gather_feat
+from paddle3d.apis import manager
+from .utils import weight_reduce_loss
 
+__all__ = [
+    "FocalLoss2D"
+]
 
 class FocalLoss(nn.Layer):
     """Focal loss class
@@ -59,6 +64,55 @@ class FocalLoss(nn.Layer):
             loss -= (positive_loss + negative_loss) / num_positive
 
         return loss
+
+
+
+@manager.LOSSES.add_component
+class FocalLoss2D(nn.Layer):
+    """A wrapper around paddle.nn.functional.sigmoid_focal_loss.
+    Args:
+        use_sigmoid (bool): currently only support use_sigmoid=True
+        alpha (float): parameter alpha in Focal Loss
+        gamma (float): parameter gamma in Focal Loss
+        loss_weight (float): final loss will be multiplied by this
+    """
+    def __init__(self,
+                 use_sigmoid=True,
+                 alpha=0.25,
+                 gamma=2.0,
+                 loss_weight=1.0,
+                 reduction='mean'):
+        super(FocalLoss2D, self).__init__()
+        assert use_sigmoid == True, \
+            'Focal Loss only supports sigmoid at the moment'
+        self.use_sigmoid = use_sigmoid
+        self.alpha = alpha
+        self.gamma = gamma
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+
+    def forward(self, pred, target, weight, avg_factor=None):
+        """forward function.
+        Args:
+            pred (Tensor): logits of class prediction, of shape (N, num_classes)
+            target (Tensor): target class label, of shape (N, )
+            reduction (str): the way to reduce loss, one of (none, sum, mean)
+        """
+        num_classes = pred.shape[1]
+        target = F.one_hot(target, num_classes+1).cast(pred.dtype)
+        target = target[:, :-1].detach()
+        loss = F.sigmoid_focal_loss(
+            pred, target, alpha=self.alpha, gamma=self.gamma, reduction='none')
+        if weight is not None:
+            if weight.shape != loss.shape:
+                if weight.shape[0] == loss.shape[0]:
+                    weight = weight.reshape((-1, 1))
+                else:
+                    assert weight.numel() == loss.numel()
+                    weight = weight.reshape((loss.shape[0], -1))
+            assert weight.ndim == loss.ndim
+        loss = weight_reduce_loss(loss, weight, self.reduction, avg_factor)
+        return loss * self.loss_weight
 
 
 class FastFocalLoss(nn.Layer):
@@ -144,7 +198,7 @@ class MultiFocalLoss(nn.Layer):
         # create the labels one hot tensor
         target_one_hot = F.one_hot(
             target, num_classes=prediction.shape[1]).cast(
-                prediction.dtype) + self.eps
+            prediction.dtype) + self.eps
         new_shape = [0, len(target_one_hot.shape) - 1
                      ] + [i for i in range(1,
                                            len(target_one_hot.shape) - 1)]
@@ -189,7 +243,7 @@ class SigmoidFocalClassificationLoss(nn.Layer):
                 Sigmoid cross entropy loss without reduction
         """
         loss = paddle.clip(prediction, min=0) - prediction * target + \
-            paddle.log1p(paddle.exp(-paddle.abs(prediction)))
+               paddle.log1p(paddle.exp(-paddle.abs(prediction)))
         return loss
 
     def forward(self, prediction, target, weights):

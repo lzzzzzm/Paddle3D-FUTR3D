@@ -8,35 +8,9 @@ import numpy as np
 
 from paddle3d.apis import manager
 from paddle3d.models.transformer.attention import MultiHeadAttention, FUTR3DCrossAtten, inverse_sigmoid
+from paddle3d.models.layers.param_init import xavier_uniform_, constant_
 
 __all__ = ["FUTR3DTransformer", 'FUTR3DTransformerDecoder', 'DetrTransformerDecoderLayer']
-
-
-def _no_grad_uniform_(tensor, a, b):
-    with paddle.no_grad():
-        tensor.set_value(
-            paddle.uniform(
-                shape=tensor.shape, dtype=tensor.dtype, min=a, max=b))
-    return tensor
-
-
-def uniform_(tensor, a, b):
-    """
-    Modified tensor inspace using uniform_
-    Args:
-        tensor (paddle.Tensor): paddle Tensor
-        a (float|int): min value.
-        b (float|int): max value.
-    Return:
-        tensor
-    """
-    return _no_grad_uniform_(tensor, a, b)
-
-
-def linear_init_(module):
-    bound = 1 / math.sqrt(module.weight.shape[0])
-    uniform_(module.weight, -bound, bound)
-    uniform_(module.bias, -bound, bound)
 
 
 @manager.TRANSFORMER_LAYERS.add_component
@@ -80,13 +54,6 @@ class DetrTransformerDecoderLayer(nn.Layer):
         attn_dropout = dropout if attn_dropout is None else attn_dropout
         act_dropout = dropout if feedforward_dropout is None else feedforward_dropout
 
-        # attn
-        # self.self_attn = MultiHeadAttention(
-        #     embed_dim=self.embed_dims,
-        #     num_heads=self.num_heads,
-        #     attn_drop=attn_dropout,
-        #     proj_drop=act_dropout
-        # )
         self.self_attn = MultiHeadAttention(
             embed_dim=self.embed_dims,
             num_heads=self.num_heads,
@@ -121,9 +88,6 @@ class DetrTransformerDecoderLayer(nn.Layer):
         self.norms = nn.LayerList(
             [nn.LayerNorm(embed_dims) for i in range(3)]
         )
-        # self.norm1 = nn.LayerNorm(embed_dims)
-        # self.norm2 = nn.LayerNorm(embed_dims)
-        # self.norm3 = nn.LayerNorm(embed_dims)
         self.activation = getattr(F, activation)
         # self._reset_parameters()
 
@@ -312,6 +276,16 @@ class FUTR3DTransformer(nn.Layer):
         self.embed_dims = self.decoder.embed_dims
         # layer
         self.reference_points = nn.Linear(self.embed_dims, 3)
+        self.init_weights()
+
+    def init_weights(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+
+        xavier_uniform_(self.reference_points.weight)
+        constant_(self.reference_points.bias, 0)
+
 
     def forward(self,
                 pts_feats,

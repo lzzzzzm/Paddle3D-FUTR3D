@@ -4,14 +4,9 @@ import paddle.nn as nn
 from paddle3d.apis import manager
 from paddle3d.models.detection.futr3d.futr3d_utils import GridMask, bbox3d2result
 
+from collections import OrderedDict
+
 __all__ = ["FUTR3D"]
-# add to record
-import pickle
-def save_variable(v,filename):
-    f=open(filename,'wb')
-    pickle.dump(v,f)
-    f.close()
-    return filename
 
 @manager.MODELS.add_component
 class FUTR3D(nn.Layer):
@@ -33,8 +28,7 @@ class FUTR3D(nn.Layer):
         self.head = head
         self.backbone = backbone
         self.neck = neck
-        if self.use_Radar:
-            self.radar_encoder = radar_encoder
+        self.radar_encoder = radar_encoder
 
     def extract_img_feat(self, img, img_metas=None):
         """
@@ -57,14 +51,13 @@ class FUTR3D(nn.Layer):
         return img_feats_reshaped
 
     def extract_pts_feat(self, points):
+        # TODO
         pass
 
     def extract_feat(self, points, img, radar):
 
         if self.use_Cam:
-            # save_variable(img.numpy(), 'paddle_img.txt')
             img_feats = self.extract_img_feat(img)
-            # save_variable(img_feats, 'paddle_img_feats.txt')
         else:
             img_feats = None
 
@@ -74,21 +67,13 @@ class FUTR3D(nn.Layer):
             pts_feats = None
 
         if self.use_Radar:
-            # save_variable(radar.numpy(), 'paddle_radar.txt')
+            radar = radar.squeeze(1)
             rad_feats = self.radar_encoder(radar)
-            # save_variable(rad_feats.numpy(), 'paddle_rad_feats.txt')
         else:
             rad_feats = None
 
         return (pts_feats, img_feats, rad_feats)
 
-    def test_forward(self, outs, img_metas):
-        bbox_list = self.get_bboxes(outs, img_metas)
-        bbox_results = [
-            bbox3d2result(bboxes, scores, labels)
-            for bboxes, scores, labels in bbox_list
-        ]
-        return bbox_list
 
     def forward_mdfs_train(self,
                            pts_feats,
@@ -96,17 +81,25 @@ class FUTR3D(nn.Layer):
                            rad_feats,
                            gt_bboxes_3d=None,
                            gt_labels_3d=None,
+                           gravity_center=None,
                            img_metas=None,
                            gt_bboxes_ignore=None):
 
-        outs = self.pts_bbox_head(pts_feats=pts_feats,
+        outs = self.head(pts_feats=pts_feats,
                                   img_feats=img_feats,
                                   rad_feats=rad_feats,
                                   img_metas=img_metas)
+        # box
+        bbox_list = self.head.get_bboxes(outs, img_metas)
 
-        loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
-        losses = self.pts_bbox_head.loss(*loss_inputs)
-        return losses
+        loss_inputs = [gt_bboxes_3d, gt_labels_3d,gravity_center, outs]
+        losses = self.head.loss(*loss_inputs)
+        loss = self._parse_loss(losses)
+        outputs = {
+            'loss':loss,
+            'preds':bbox_list
+        }
+        return outputs
 
     def forward_mdfs_test(self,
                           pts_feats,
@@ -124,26 +117,61 @@ class FUTR3D(nn.Layer):
             bbox3d2result(bboxes, scores, labels)
             for bboxes, scores, labels in bbox_list
         ]
-        return bbox_results
+        outputs={
+            'preds':bbox_list
+        }
+        return outputs
+
+    def _parse_loss(self, losses):
+
+        log_vars = OrderedDict()
+        for loss_name, loss_value in losses.items():
+            if isinstance(loss_value, paddle.Tensor):
+                log_vars[loss_name] = loss_value.mean()
+            elif isinstance(loss_value, list):
+                log_vars[loss_name] = sum(_loss.mean() for _loss in loss_value)
+            else:
+                raise TypeError(
+                    f'{loss_name} is not a tensor or list of tensors')
+
+        loss = sum(_value for _key, _value in log_vars.items()
+                   if 'loss' in _key)
+
+        return loss
 
     def forward(self,sample):
-        points = sample['lidar']
-        img = sample['img']
-        radar = sample['radar']
-        img_metas = sample['img_meta']
+        if self.use_LiDAR:
+            points = sample['lidar']
+        else:
+            points = None
+        if self.use_Cam:
+            img = sample['img']
+            img_metas = sample['img_meta']
+        else:
+            img = None
+        if self.use_Radar:
+            radar = sample['radar']
+        else:
+            radar = None
+        gt_labels_3d = sample['labels']
+        gt_bboxes_3d = sample['bboxes_3d']
+        gravity_center = sample['gravity_center']
         pts_feats, img_feats, rad_feats = self.extract_feat(points=points, img=img, radar=radar)
-        """
-            img_feats[0].shape = [1, 6, 256, 58, 100]
-            img_feats[1].shape = [1, 6, 256, 29, 50]
-            img_feats[2].shape = [1, 6, 256, 15, 25]
-            img_feats[3].shape = [1, 6, 256, 8, 13]
-
-            rad_feats.shape = [1, 1200, 67]
-        """
-
-        # # Test forward
-        bbox_results = self.forward_mdfs_test(pts_feats=pts_feats,
-                                              img_feats=img_feats,
-                                              rad_feats=rad_feats,
-                                              img_metas=img_metas)
-        return bbox_results
+        if self.training:
+            outputs = self.forward_mdfs_train(
+                pts_feats=pts_feats,
+                img_feats=img_feats,
+                rad_feats=rad_feats,
+                img_metas=img_metas,
+                gt_bboxes_3d=gt_bboxes_3d,
+                gt_labels_3d=gt_labels_3d,
+                gravity_center=gravity_center
+            )
+        else:
+            outputs = self.forward_mdfs_test(
+                pts_feats=pts_feats,
+                img_feats=img_feats,
+                rad_feats=rad_feats,
+                img_metas=img_metas
+            )
+        return outputs

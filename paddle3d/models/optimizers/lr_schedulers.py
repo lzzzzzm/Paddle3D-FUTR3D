@@ -23,7 +23,7 @@ Apache-2.0 license [see LICENSE for details].
 from functools import partial
 
 import paddle
-from paddle.optimizer.lr import LRScheduler
+from paddle.optimizer.lr import LRScheduler, LinearWarmup, MultiStepDecay
 
 from paddle3d.apis import manager
 
@@ -140,3 +140,25 @@ class OneCycle(LRSchedulerCycle):
 
     def get_mom(self):
         return self.last_moms
+
+@manager.OPTIMIZERS.add_component
+class LinearWarmupMultiStepDecay(LinearWarmup):
+    def __init__(self,
+                 learning_rate,
+                 warmup_steps,
+                 warmup_ratio,
+                 step,
+                 gamma=0.1
+                 ):
+        lr = MultiStepDecay(
+            learning_rate=learning_rate,
+            milestones=step,
+            gamma=gamma
+        )
+
+        super(LinearWarmupMultiStepDecay, self).__init__(
+            learning_rate=lr,
+            warmup_steps=warmup_steps,
+            start_lr=warmup_ratio,
+            end_lr=learning_rate
+        )

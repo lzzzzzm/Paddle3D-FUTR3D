@@ -14,7 +14,7 @@
 
 import paddle
 
-from paddle3d.sample import Sample, ModlitySample
+from paddle3d.sample import Sample
 
 
 def training_step(model: paddle.nn.Layer, optimizer: paddle.optimizer.Optimizer,
@@ -42,7 +42,7 @@ def training_step(model: paddle.nn.Layer, optimizer: paddle.optimizer.Optimizer,
     return loss
 
 
-def validation_step(model: paddle.nn.Layer, sample: Sample or ModlitySample) -> dict:
+def validation_step(model: paddle.nn.Layer, sample: Sample) -> dict:
     model.eval()
     with paddle.no_grad():
         outputs = model(sample)

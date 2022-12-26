@@ -18,7 +18,7 @@ import numpy as np
 import cv2
 
 from paddle3d.apis import manager
-from paddle3d.sample import Sample, ModlitySample
+from paddle3d.sample import Sample
 from paddle3d.transforms import functional as F
 from paddle3d.transforms.base import TransformABC
 
@@ -81,7 +81,7 @@ class NormalizeMultiviewImage(TransformABC):
         if reduce(lambda x, y: x * y, self.std) == 0:
             raise ValueError('{}: std is invalid!'.format(self))
 
-    def __call__(self, sample: ModlitySample):
+    def __call__(self, sample):
         mean = np.float64(self.mean.reshape(1, -1))
         stdinv = 1 / np.float64(self.std.reshape(1, -1))
         for index in range(sample.img.shape[0]):

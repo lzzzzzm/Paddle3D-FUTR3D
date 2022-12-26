@@ -30,6 +30,7 @@ import numpy as np
 import scipy
 from scipy.spatial import Delaunay
 
+import paddle
 from paddle3d.geometries.structure import _Structure
 
 
@@ -102,6 +103,7 @@ class BBoxes3D(_Structure):
                  coordmode: CoordMode = 0,
                  velocities: List[float] = None,
                  origin: List[float] = [0.5, 0.5, 0.5],
+                 origin_trans=False,
                  rot_axis: int = 2):
         if not isinstance(data, np.ndarray):
             data = np.array(data)
@@ -110,6 +112,24 @@ class BBoxes3D(_Structure):
         self.velocities = velocities
         self.origin = origin
         self.rot_axis = rot_axis
+
+        if origin_trans:
+            if origin != (0.5, 0.5, 0):
+                dst = np.array([0.5, 0.5, 0])
+                src = np.array(origin)
+                data[:, :3] += data[:, 3:6] * (dst - src)
+        self.data = data
+
+    @property
+    def gravity_center(self):
+        """torch.Tensor: A tensor with center of each box in shape (N, 3)."""
+        bottom_center = self.bottom_center
+        gravity_center = paddle.zeros(shape=bottom_center.shape)
+        # gravity_center = torch.zeros_like(bottom_center)
+        gravity_center[:, :2] = bottom_center[:, :2]
+        gravity_center[:, 2] = bottom_center[:, 2] + self.tensor[:, 5] * 0.5
+        return gravity_center
+
 
     @property
     def corners_3d(self):

@@ -372,10 +372,6 @@ class PadMultiViewImage(TransformABC):
             'pad_size_divisor' : self.size_divisor
         }
         sample.img_meta[0].update(updatae_dict)
-        # sample.img_meta['img_shape'] = [img.shape for img in padded_img]
-        # sample.img_meta['pad_shape'] = [img.shape for img in padded_img]
-        # sample.img_meta['pad_fixed_size'] = self.size
-        # sample.img_meta['pad_size_divisor'] = self.size_divisor
         return sample
 
     def __call__(self, sample):

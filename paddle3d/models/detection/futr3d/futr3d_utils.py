@@ -56,7 +56,7 @@ def normalize_bbox(bboxes, pc_range):
     h = bboxes[..., 5:6].log()
 
     rot = bboxes[..., 6:7]
-    if bboxes.size(-1) > 7:
+    if bboxes.shape[-1] > 7:
         vx = bboxes[..., 7:8]
         vy = bboxes[..., 8:9]
         normalized_bboxes = paddle.concat(

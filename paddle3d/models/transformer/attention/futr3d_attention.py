@@ -4,6 +4,7 @@ import paddle.nn.functional as F
 
 from paddle3d.models.transformer.attention.multiheadattention import  MultiHeadSelfAttention
 from paddle3d.models.detection.futr3d.futr3d_utils import nan_to_num
+from paddle3d.models.layers.param_init import xavier_uniform_, constant_
 
 import numpy as np
 from scipy.spatial.distance import cdist
@@ -91,7 +92,7 @@ def pairwise_dist (A, B):
 def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = []
     for img_meta in img_metas:
-        lidar2img.append(img_meta['lidar2img'])
+        lidar2img.append(img_meta[0]['lidar2img'])
     lidar2img = np.asarray(lidar2img)
     reference_points = reference_points.clone()
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
@@ -108,15 +109,10 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points = paddle.concat((reference_points, paddle.ones_like(reference_points[..., :1])), -1)
     num_cam = lidar2img.shape[1]
     # ref_point change to (B, num_cam, num_query, 4, 1)
-    # reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)
-    reference_points = paddle.reshape(reference_points, shape=(B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(
-        -1)
+    reference_points = paddle.reshape(reference_points, shape=(B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(-1)
     lidar2img = paddle.reshape(lidar2img, shape=(B, num_cam, 1, 4, 4)).tile([1, 1, num_query, 1, 1])
-    # lidar2img = paddle.repeat_interleave(lidar2img, (1, 1, num_query, 1, 1))
     # ref_point_cam change to (B, num_cam, num_query, 4)
     reference_points_cam = paddle.matmul(lidar2img, reference_points).squeeze(-1)
-    # save_variable(lidar2img.numpy(), 'lidar2img.txt')
-    # save_variable(reference_points_cam.numpy(), 'reference_points_cam.txt')
 
     eps = 1e-5
     mask = (reference_points_cam[..., 2:3] > eps)
@@ -124,8 +120,8 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
     # img_metas['img_shape']=[900, 1600]
-    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
+    reference_points_cam[..., 0] /= img_metas[0][0]['img_shape'][0][1]
+    reference_points_cam[..., 1] /= img_metas[0][0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
     mask = (mask & (reference_points_cam[..., 0:1] > -1.0)
             & (reference_points_cam[..., 0:1] < 1.0)
@@ -138,8 +134,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # mask = nan_to_num(mask)
     sampled_feats = []
     num_points = 1
-    # save_variable(reference_points_cam.numpy(), 'reference_points_cam.txt')
-    reference_points_cam = load_variavle('reference_points_cam.txt')
     reference_points_cam = paddle.to_tensor(reference_points_cam)
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
@@ -153,13 +147,11 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         # sampled_feat shape (B, C, num_query, N, num_points)
         sampled_feat = paddle.reshape(sampled_feat, shape=(B, N, C, num_query, num_points))
         sampled_feat = paddle.transpose(sampled_feat, (0, 2, 3, 1, 4))
-        save_variable(sampled_feat.numpy(), 'sampled_feat.txt')
         sampled_feats.append(sampled_feat)
 
     sampled_feats = paddle.stack(sampled_feats, -1)
     # sampled_feats (B, C, num_query, num_cam, num_points, len(lvl_feats))
     sampled_feats = paddle.reshape(sampled_feats, shape=(B, C, num_query, num_cam, num_points, len(mlvl_feats)))
-    save_variable(sampled_feats.numpy(), 'sampled_feats.txt')
     # ref_point_3d (B, N, num_query, 3)  maks (B, N, num_query, 1)
     return reference_points_3d, sampled_feats, mask
 
@@ -285,6 +277,25 @@ class FUTR3DCrossAtten(nn.Layer):
             nn.Linear(self.embed_dims, self.embed_dims),
             nn.LayerNorm(self.embed_dims),
         )
+        self.init_weights()
+
+    def init_weights(self):
+        if self.use_Cam:
+            constant_(self.attention_weights.weight, 0)
+            constant_(self.attention_weights.bias, 0)
+            constant_(self.img_output_proj.bias, 0)
+            xavier_uniform_(self.img_output_proj.weight)
+        if self.use_LiDAR:
+            constant_(self.pts_attention_weights.weight, 0)
+            constant_(self.pts_attention_weights.bias, 0)
+            constant_(self.pts_output_proj.bias, 0)
+            xavier_uniform_(self.pts_output_proj.weight)
+        if self.use_Radar:
+            constant_(self.radar_attention_weights.weight, 0)
+            constant_(self.radar_attention_weights.bias, 0)
+            constant_(self.radar_output_proj.bias, 0)
+            xavier_uniform_(self.radar_output_proj.weight)
+
 
     def forward(self,
                 query,
@@ -351,11 +362,6 @@ class FUTR3DCrossAtten(nn.Layer):
             for index in range(ref_xy.shape[0]):
                 ref_radar_dist.append(-1.0 * cdist(ref_xy[index], radar_xy[index]))
             ref_radar_dist = paddle.to_tensor(ref_radar_dist, dtype='float32')
-            test1 = ref_radar_dist
-            ref_radar_dist = load_variavle('ref_radar_dist.txt')
-            ref_radar_dist = paddle.to_tensor(ref_radar_dist, dtype='float32')
-            test2 = ref_radar_dist
-            compare = (test1 - test2).max()
             # [B, num_query, topk]
             _value, indices = paddle.topk(ref_radar_dist, self.radar_topk)
             # [B, num_query, M]

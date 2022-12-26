@@ -475,12 +475,14 @@ class ResNet(nn.Layer):
         self.pretrained = pretrained
         self.init_weight()
 
+
         # freeze parameter
         if frozen_stages >= 0:
             self._freeze_parameters(self.conv1)
             for i in range(min(frozen_stages, 3)):
                 for j in range(len(self.stage_list[i])):
                     self._freeze_parameters(self.stage_list[i][j])
+
 
     def _freeze_parameters(self, m):
         for p in m.parameters():

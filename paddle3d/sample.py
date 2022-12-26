@@ -42,29 +42,6 @@ class SampleMeta(_EasyDict):
         "time_lag",
         "ref_from_curr"
     ]
-
-    # yapf: enable
-
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-
-class ImgMeta(_EasyDict):
-    # yapf: disable
-    __slots__ = [
-        "img_filename",
-        "img_shape",
-        'ori_shape',
-        'pad_shape',
-        'pad_fixed_size',
-        'pad_size_divisor',
-        'scale_factor'
-        "lidar2img",
-        "intrinsic",
-        "extrinsic",
-    ]
-
     # yapf: enable
 
     def __init__(self, **kwargs):
@@ -77,7 +54,7 @@ class Sample(_EasyDict):
     """
     _VALID_MODALITIES = ["image", "lidar", "radar", "multimodal", "multiview"]
 
-    def __init__(self, path: str, modality: str):
+    def __init__(self, path: str or dict, modality: str):
         if modality not in self._VALID_MODALITIES:
             raise ValueError('Only modality {} is supported, but got {}'.format(
                 self._VALID_MODALITIES, modality))
@@ -94,18 +71,3 @@ class Sample(_EasyDict):
 
         self.sweeps = []
         self.attrs = None
-
-
-class ModlitySample(Sample):
-    def __init__(self, use_modality):
-        self.modality = 'multimodal'
-        self.use_modality = use_modality
-        self.img_meta = []
-        self.sample_idx = None
-        self.lidar_path = None
-        self.radar = None
-        self.img = None
-        self.lidar = None
-        self.timestamp = None
-        self.labels = None
-        self.sweeps = []

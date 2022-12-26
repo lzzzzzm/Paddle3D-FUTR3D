@@ -25,7 +25,7 @@ from pyquaternion import Quaternion
 from paddle3d.apis import manager
 from paddle3d.datasets.nuscenes.nuscenes_det import NuscenesDetDataset
 from paddle3d.geometries import CoordMode
-from paddle3d.sample import Sample, ModlitySample
+from paddle3d.sample import Sample
 from paddle3d.transforms import TransformABC
 
 
