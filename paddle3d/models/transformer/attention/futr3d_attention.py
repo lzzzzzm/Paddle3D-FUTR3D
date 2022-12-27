@@ -81,12 +81,6 @@ def gather(feature: paddle.Tensor, ind: paddle.Tensor):
 
     return feature.gather_nd(ind)
 
-def pairwise_dist (A, B):
-    A2 = (A ** 2).sum(axis=1).reshape((-1, 1))
-    B2 = (B ** 2).sum(axis=1)
-    D = A2 + B2 - 2 * A.mm(B.transpose((1, 0)))
-    D = D.sqrt()
-    return D
 
 
 def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):

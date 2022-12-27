@@ -89,15 +89,6 @@ class DetrTransformerDecoderLayer(nn.Layer):
             [nn.LayerNorm(embed_dims) for i in range(3)]
         )
         self.activation = getattr(F, activation)
-        # self._reset_parameters()
-
-    # def _reset_parameters(self):
-    #     linear_init_(self.ffn1)
-    #     linear_init_(self.ffn2)
-
-    @staticmethod
-    def with_pos_embed(tensor, pos_embed):
-        return tensor if pos_embed is None else tensor + pos_embed
 
     def forward(self,
                 query,
@@ -241,11 +232,12 @@ class FUTR3DTransformerDecoder(nn.Layer):
                 tmp = reg_branches[lid](output)
 
                 assert reference_points.shape[-1] == 3
+                # new_reference_points = paddle.zeros_like(reference_points)
                 new_reference_points = np.zeros_like(reference_points)
                 new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points[..., :2])
-                new_reference_points[..., 2:3] = tmp[
-                                                 ..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
-                new_reference_points = paddle.to_tensor(reference_points, dtype='float32')
+                new_reference_points[..., 2:3] = tmp[..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
+                new_reference_points = paddle.to_tensor(new_reference_points)
+
                 reference_points = F.sigmoid(new_reference_points)
             output = paddle.transpose(output, (1, 0, 2))
             if self.return_intermediate:

@@ -39,8 +39,8 @@ class HungarianAssigner3D(BaseAssigner):
         num_gts, num_bboxes = gt_bboxes.shape[0], bbox_pred.shape[0]
         # 1. assign -1 by default
 
-        assigned_gt_inds = paddle.full(shape=(num_bboxes, ), fill_value=-1, dtype='int64')
-        assigned_labels = paddle.full(shape=(num_bboxes, ), fill_value=-1, dtype='int64')
+        assigned_gt_inds = paddle.full(shape=(num_bboxes, ), fill_value=-1, dtype='int32')
+        assigned_labels = paddle.full(shape=(num_bboxes, ), fill_value=-1, dtype='int32')
         if num_gts == 0 or num_bboxes == 0:
             # No ground truth or boxes, return empty assignment
             if num_gts == 0:
@@ -67,14 +67,16 @@ class HungarianAssigner3D(BaseAssigner):
                               'to install scipy first.')
 
         matched_row_inds, matched_col_inds = linear_sum_assignment(cost)
-        matched_row_inds = paddle.to_tensor(matched_row_inds, place=bbox_pred.place)
-        matched_col_inds = paddle.to_tensor(matched_col_inds, place=bbox_pred.place)
+        matched_row_inds = paddle.to_tensor(matched_row_inds, place=bbox_pred.place, dtype='int32')
+        matched_col_inds = paddle.to_tensor(matched_col_inds, place=bbox_pred.place, dtype='int32')
 
         # 4. assign backgrounds and foregrounds
         # assign all indices to backgrounds first
         assigned_gt_inds[:] = 0
         # assign foregrounds based on matching results
+        # print('assigned_gt_inds:{}, matched_col_inds:{}'.format(assigned_gt_inds, matched_col_inds))
         assigned_gt_inds[matched_row_inds] = matched_col_inds + 1
+
         assigned_labels[matched_row_inds] = gt_labels[matched_col_inds]
         return AssignResult(
             num_gts, assigned_gt_inds, None, labels=assigned_labels)

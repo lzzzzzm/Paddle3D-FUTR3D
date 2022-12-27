@@ -12,6 +12,18 @@ from paddle3d.models.layers.param_init import bias_init_with_prob,constant_
 from paddle3d.apis import manager
 
 __all__ = ["DeformableFUTR3DHead"]
+import pickle
+def load_variavle(filename):
+   f=open(filename,'rb')
+   r=pickle.load(f)
+   f.close()
+   return r
+
+def save_variable(v, filename):
+    f = open(filename, 'wb')
+    pickle.dump(v, f)
+    f.close()
+    return filename
 
 
 @manager.HEADS.add_component
@@ -152,6 +164,12 @@ class DeformableFUTR3DHead(nn.Layer):
         hs = paddle.transpose(hs, (0, 2, 1, 3))
         outputs_classes = []
         outputs_coords = []
+        hs = load_variavle('hs.txt')
+        init_reference = load_variavle('init_reference.txt')
+        inter_references = load_variavle('inter_references.txt')
+        hs = paddle.to_tensor(hs)
+        init_reference = paddle.to_tensor(init_reference)
+        inter_references = paddle.to_tensor(inter_references)
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
@@ -161,6 +179,7 @@ class DeformableFUTR3DHead(nn.Layer):
             outputs_class = self.cls_branches[lvl](hs[lvl])
             tmp = self.reg_branches[lvl](hs[lvl])
             assert reference.shape[-1] == 3
+
             tmp[..., 0:2] += reference[..., 0:2]
             tmp[..., 0:2] = F.sigmoid(tmp[..., 0:2])
             tmp[..., 4:5] += reference[..., 2:3]
@@ -173,6 +192,7 @@ class DeformableFUTR3DHead(nn.Layer):
             outputs_coords.append(outputs_coord)
         outputs_classes = paddle.stack(outputs_classes)
         outputs_coords = paddle.stack(outputs_coords)
+        # save_variable(outputs_coords.numpy(), 'outputs_coords.txt')
         outs = {
             'all_cls_scores': outputs_classes,
             'all_bbox_preds': outputs_coords,
@@ -204,7 +224,7 @@ class DeformableFUTR3DHead(nn.Layer):
 
         # label targets
         # labels = paddle.full_like(num_bboxes, self.num_classes, dtype='long')
-        labels = paddle.full((num_bboxes,), self.num_classes, dtype='int64')
+        labels = paddle.full((num_bboxes,), self.num_classes, dtype='int32')
 
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
         # label_weights = gt_bboxes.new_ones(num_bboxes)

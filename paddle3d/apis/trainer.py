@@ -129,6 +129,8 @@ class Trainer:
         self.resume = resume
         vdl_file_name = None
         self.iters_per_epoch = len(self.train_dataloader)
+        # for batch, index in enumerate(self.train_dataloader):
+        #     print(batch)
 
 
         if iters is None:
@@ -303,13 +305,13 @@ class Trainer:
         if self.val_dataset is None:
             raise RuntimeError('No evaluation dataset specified!')
         msg = 'evaluate on validate dataset'
-        metric_obj = self.val_dataset.metric
+        # metric_obj = self.val_dataset.metric
 
         for idx, sample in logger.enumerate(self.eval_dataloader, msg=msg):
-            # if 'data/nuscenes/samples/CAM_FRONT/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151603512404.jpg' in sample['img_meta'][0]['img_filename']:
-            #     print('check')
+        # if 'data/nuscenes/samples/CAM_FRONT/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151603512404.jpg' in sample['path']['image_paths'][0][0]:
+            print('check')
             result = validation_step(self.model, sample)
-            metric_obj.update(predictions=result, ground_truths=sample)
+            # metric_obj.update(predictions=result, ground_truths=sample)
 
         # metrics = metric_obj.compute(verbose=True)
         # metric_obj = self.val_dataset.metric

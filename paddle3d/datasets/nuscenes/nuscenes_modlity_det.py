@@ -60,13 +60,28 @@ class NuscenesModlityDataset(BaseDataset):
             self.use_modality = dict(
                 use_camera=True,
                 use_lidar=False,
-                use_radar=True,
+                use_radar=False,
                 use_map=False,
                 use_external=False,
             )
         self.CLASSES = ('car', 'truck', 'construction_vehicle', 'bus',
                         'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                         'traffic_cone')
+        # self.NameMapping = {
+        #     'human.pedestrian.personal_mobility':'pedestrian',
+        #     'human.pedestrian.stroller':'pedestrian',
+        #     'human.pedestrian.wheelchair':'pedestrian'
+        # }
+        self.NameMapping = ['human.pedestrian.personal_mobility',
+                            'human.pedestrian.stroller',
+                            'human.pedestrian.wheelchair'
+        ]
+        self.ignore_class_name = ['movable_object.pushable_pullable',
+                                  'movable_object.debris',
+                                  'animal',
+                                  'static_object.bicycle_rack',
+                                  'vehicle.emergency.ambulance',
+                                  'vehicle.emergency.police']
         self.transforms = transforms
         if self.transforms is None:
             self.transforms = [
@@ -82,6 +97,7 @@ class NuscenesModlityDataset(BaseDataset):
             self.transforms = T.Compose(self.transforms)
 
         self.data_infos = self.load_annotations(anno_file)
+        self.filter_valid_data()
 
     def load_annotations(self, anno_file):
         """Load annotations from ann_file.
@@ -101,12 +117,35 @@ class NuscenesModlityDataset(BaseDataset):
         self.version = self.metadata['version']
         return data_infos
 
+    def filter_valid_data(self):
+        temp_data_infos = []
+        for i in range(len(self.data_infos)):
+            info = self.data_infos[i]
+            if self.use_valid_flag:
+                mask = info['valid_flag']
+            else:
+                mask = info['num_lidar_pts'] > 0
+            gt_names_3d = info['gt_names'][mask]
+            name_mask = np.full(gt_names_3d.shape, False, dtype=bool)
+            for index, name in enumerate(gt_names_3d):
+                if name in self.ignore_class_name:
+                    name_mask[index] = False
+                else:
+                    name_mask[index] = True
+                    if name in self.NameMapping:
+                        gt_names_3d[index] = 'pedestrian'
+            gt_names_3d = gt_names_3d[name_mask]
+            if len(gt_names_3d) != 0:
+                temp_data_infos.append(info)
+        self.data_infos = temp_data_infos
+
     def load_anno_info(self, index, sample):
         info = self.data_infos[index]
         if self.use_valid_flag:
             mask = info['valid_flag']
         else:
             mask = info['num_lidar_pts'] > 0
+
         gt_bboxes_3d = info['gt_boxes'][mask]
         if self.with_velocity:
             gt_velocity = info['gt_velocity'][mask]
@@ -115,6 +154,17 @@ class NuscenesModlityDataset(BaseDataset):
             gt_bboxes_3d = np.concatenate([gt_bboxes_3d, gt_velocity], axis=-1)
 
         gt_names_3d = info['gt_names'][mask]
+        name_mask = np.full(gt_names_3d.shape, False, dtype=bool)
+        for index, name in enumerate(gt_names_3d):
+            if name in self.ignore_class_name:
+                name_mask[index] = False
+            else:
+                name_mask[index] = True
+                if name in self.NameMapping:
+                    gt_names_3d[index] = 'pedestrian'
+        gt_names_3d = gt_names_3d[name_mask]
+        gt_bboxes_3d = gt_bboxes_3d[name_mask]
+
         gt_labels_3d = []
         for cat in gt_names_3d:
             if cat in self.CLASSES:

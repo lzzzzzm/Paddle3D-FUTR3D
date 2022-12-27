@@ -149,7 +149,7 @@ class LoadMultiViewImageFromFiles(TransformABC):
         img = []
         for name in filename:
             im = cv2.imread(name)
-            im = cv2.resize(im, (im.shape[0]//4, im.shape[1]//4))
+            im = cv2.resize(im, (416, 416))
             img.append(im)
         img = np.array(img)
         img = np.transpose(img, (1, 2, 3, 0))
@@ -160,7 +160,6 @@ class LoadMultiViewImageFromFiles(TransformABC):
             img = img.astype(np.float32)
 
         sample['img'] = np.array([img[..., i] for i in range(img.shape[-1])])
-        # sample.img = np.array([img[..., i] for i in range(img.shape[-1])])
         update_dict = {
             'img_shape' : img.shape,
             'ori_shape' : img.shape,
@@ -318,9 +317,9 @@ class ObjectRangeFilter(TransformABC):
         """
         # Check points instance type and initialise bev_range
         if self.bbox_instance == 'LiDARInstance3DBoxes' or self.bbox_instance == 'DepthInstance3DBoxes':
-            bev_range = self.pcd_range[[0, 1, 3, 4]]
+            bev_range = paddle.to_tensor(self.pcd_range[[0, 1, 3, 4]], dtype='float32')
         elif self.bbox_instance == 'CameraInstance3DBoxes':
-            bev_range = self.pcd_range[[0, 2, 3, 5]]
+            bev_range = paddle.to_tensor(self.pcd_range[[0, 2, 3, 5]], dtype='float32')
 
         gt_bboxes_3d = sample['bboxes_3d']
         gt_labels_3d = sample['labels']
@@ -329,6 +328,10 @@ class ObjectRangeFilter(TransformABC):
         bev_index = paddle.to_tensor([0, 1, 3, 4, 6])
         bbox_bev = paddle.index_select(gt_bboxes_3d, bev_index, axis=1)
         # bbox_bev = gt_bboxes_3d[:, [0, 1, 3, 4, 6]]
+        # mask1 = bbox_bev[:, 0] > bev_range[0]
+        # mask2 = bbox_bev[:, 1] > bev_range[1]
+        # mask3 = bbox_bev[:, 0] < bev_range[2]
+        # mask4 = bbox_bev[:, 1] < bev_range[3]
         mask = ((bbox_bev[:, 0] > bev_range[0])
                           & (bbox_bev[:, 1] > bev_range[1])
                           & (bbox_bev[:, 0] < bev_range[2])
