@@ -148,8 +148,9 @@ class LoadMultiViewImageFromFiles(TransformABC):
         # img is of shape (h, w, c, num_views)
         img = []
         for name in filename:
+            name = name.replace('\\', '/')
             im = cv2.imread(name)
-            im = cv2.resize(im, (416, 416))
+            # im = cv2.resize(im, (416, 416))
             img.append(im)
         img = np.array(img)
         img = np.transpose(img, (1, 2, 3, 0))

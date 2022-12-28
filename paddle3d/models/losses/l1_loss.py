@@ -50,4 +50,4 @@ class L1Loss(nn.Layer):
         """
         loss = calc_l1_loss(pred, target)
         loss = weight_reduce_loss(loss, weight, self.reduction, avg_factor)
-        return loss
+        return loss*self.loss_weight

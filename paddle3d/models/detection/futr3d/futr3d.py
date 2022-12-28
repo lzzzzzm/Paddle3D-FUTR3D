@@ -7,6 +7,12 @@ from paddle3d.models.detection.futr3d.futr3d_utils import GridMask, bbox3d2resul
 from collections import OrderedDict
 
 __all__ = ["FUTR3D"]
+# import pickle
+# def load_variavle(filename):
+#    f=open(filename,'rb')
+#    r=pickle.load(f)
+#    f.close()
+#    return r
 
 @manager.MODELS.add_component
 class FUTR3D(nn.Layer):
@@ -89,12 +95,10 @@ class FUTR3D(nn.Layer):
                                   img_feats=img_feats,
                                   rad_feats=rad_feats,
                                   img_metas=img_metas)
-        # box
-        bbox_list = self.head.get_bboxes(outs, img_metas)
-
         loss_inputs = [gt_bboxes_3d, gt_labels_3d,gravity_center, outs]
         losses = self.head.loss(*loss_inputs)
         loss = self._parse_loss(losses)
+        bbox_list = self.head.get_bboxes(outs, img_metas)
         outputs = {
             'loss':loss,
             'preds':bbox_list

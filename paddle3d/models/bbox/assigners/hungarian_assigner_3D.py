@@ -69,6 +69,8 @@ class HungarianAssigner3D(BaseAssigner):
         matched_row_inds, matched_col_inds = linear_sum_assignment(cost)
         matched_row_inds = paddle.to_tensor(matched_row_inds, place=bbox_pred.place, dtype='int32')
         matched_col_inds = paddle.to_tensor(matched_col_inds, place=bbox_pred.place, dtype='int32')
+        assigned_gt_inds = paddle.to_tensor(assigned_gt_inds, dtype='int32')
+        gt_labels = paddle.to_tensor(gt_labels, dtype='int32')
 
         # 4. assign backgrounds and foregrounds
         # assign all indices to backgrounds first

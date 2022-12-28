@@ -164,12 +164,12 @@ class DeformableFUTR3DHead(nn.Layer):
         hs = paddle.transpose(hs, (0, 2, 1, 3))
         outputs_classes = []
         outputs_coords = []
-        hs = load_variavle('hs.txt')
-        init_reference = load_variavle('init_reference.txt')
-        inter_references = load_variavle('inter_references.txt')
-        hs = paddle.to_tensor(hs)
-        init_reference = paddle.to_tensor(init_reference)
-        inter_references = paddle.to_tensor(inter_references)
+        # hs = load_variavle('hs.txt')
+        # init_reference = load_variavle('init_reference.txt')
+        # inter_references = load_variavle('inter_references.txt')
+        # hs = paddle.to_tensor(hs)
+        # init_reference = paddle.to_tensor(init_reference)
+        # inter_references = paddle.to_tensor(inter_references)
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
@@ -225,6 +225,7 @@ class DeformableFUTR3DHead(nn.Layer):
         # label targets
         # labels = paddle.full_like(num_bboxes, self.num_classes, dtype='long')
         labels = paddle.full((num_bboxes,), self.num_classes, dtype='int32')
+        gt_labels = paddle.to_tensor(gt_labels, dtype='int32')
 
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
         # label_weights = gt_bboxes.new_ones(num_bboxes)
