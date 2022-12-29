@@ -178,12 +178,13 @@ class NuscenesModlityDataset(BaseDataset):
         dst = np.array([0.5, 0.5, 0])
         src = np.array(origin)
         gt_bboxes_3d[:, :3] += gt_bboxes_3d[:, 3:6] * (dst - src)
+        gt_bboxes_3d = np.array(gt_bboxes_3d, dtype=np.float32)
         sample.bboxes_3d = []
         sample.bboxes_3d.append(gt_bboxes_3d)
         # sample.bboxes_3d = paddle.to_tensor(gt_bboxes_3d, dtype='float32')
         bottom_center = gt_bboxes_3d[:, :3]
         # calc gravity_center
-        gravity_center = np.zeros_like(bottom_center)
+        gravity_center = np.zeros_like(bottom_center, dtype=np.float32)
         gravity_center[:, :2] = bottom_center[:, :2]
         gravity_center[:, 2] = bottom_center[:, 2] + gt_bboxes_3d[:, 5] * 0.5
         sample['gravity_center'] = []
@@ -229,6 +230,9 @@ class NuscenesModlityDataset(BaseDataset):
                 lidar2img_rts.append(lidar2img_rt)
                 intrinsics.append(viewpad)
                 extrinsics.append(lidar2cam_rt.T)
+            lidar2img_rts = np.array(lidar2img_rts, dtype=np.float32)
+            intrinsics = np.array(intrinsics, dtype=np.float32)
+            extrinsics = np.array(extrinsics, dtype=np.float32)
             init_dict = {
                 'lidar2img': lidar2img_rts,
                 'intrinsics': intrinsics,
