@@ -179,11 +179,11 @@ class NuscenesModlityDataset(BaseDataset):
         src = np.array(origin)
         gt_bboxes_3d[:, :3] += gt_bboxes_3d[:, 3:6] * (dst - src)
         sample.bboxes_3d = []
-        sample.bboxes_3d.append(paddle.to_tensor(gt_bboxes_3d, dtype='float32'))
+        sample.bboxes_3d.append(gt_bboxes_3d)
         # sample.bboxes_3d = paddle.to_tensor(gt_bboxes_3d, dtype='float32')
         bottom_center = gt_bboxes_3d[:, :3]
         # calc gravity_center
-        gravity_center = paddle.zeros_like(paddle.to_tensor(bottom_center), dtype='float32')
+        gravity_center = np.zeros_like(bottom_center)
         gravity_center[:, :2] = bottom_center[:, :2]
         gravity_center[:, 2] = bottom_center[:, 2] + gt_bboxes_3d[:, 5] * 0.5
         sample['gravity_center'] = []

@@ -1,5 +1,5 @@
-batch_size: 1
-iters: 589533   # 24 epochs
+batch_size: 2
+iters: 168432   # 24 epochs
 
 model:
   type: FUTR3D
@@ -134,10 +134,10 @@ val_dataset:
 
 lr_scheduler:
   type: LinearWarmupMultiStepDecay
-  learning_rate: 0.0002
+  learning_rate: 0.0000125
   warmup_steps: 500
-  warmup_ratio: 0.000001
-  step: [589033, 645179] # 21 23 epoch
+  warmup_ratio: 0.0000001
+  step: [147378, 161414] # 21 23 epoch
 
 optimizer:
   type: AdamW

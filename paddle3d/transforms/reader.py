@@ -69,17 +69,17 @@ class Collect3D(TransformABC):
             use_map=use_map,
             use_external=use_external,
         )
-        self.to_tensor = T.ToTensor()
 
 
     def __call__(self, sample):
         collect_sample = Sample(path=sample.path, modality=sample.modality)
         if 'img' in self.key:
-            collect_sample['img'] = paddle.stack([self.to_tensor(img) for img in sample.img])
+            # transpose img to c h w
+            collect_sample['img'] = np.stack([np.transpose(img, (2, 0, 1)) for img in sample.img])
             collect_sample['img_meta'] = sample.img_meta
 
         if 'radar' in self.key:
-            collect_sample['radar'] = self.to_tensor(sample.radar)
+            collect_sample['radar'] = sample.radar
 
         # collect label
         if sample.labels is not None:
@@ -314,21 +314,19 @@ class ObjectRangeFilter(TransformABC):
         """
         # Check points instance type and initialise bev_range
         if self.bbox_instance == 'LiDARInstance3DBoxes' or self.bbox_instance == 'DepthInstance3DBoxes':
-            bev_range = paddle.to_tensor(self.pcd_range[[0, 1, 3, 4]], dtype='float32')
+            bev_range = self.pcd_range[[0, 1, 3, 4]]
         elif self.bbox_instance == 'CameraInstance3DBoxes':
-            bev_range = paddle.to_tensor(self.pcd_range[[0, 2, 3, 5]], dtype='float32')
+            bev_range = self.pcd_range[[0, 2, 3, 5]]
 
         gt_bboxes_3d = sample['bboxes_3d'][0]
         gt_labels_3d = sample['labels'][0]
         if self.with_gravity_center:
             gravity_center = sample['gravity_center'][0]
-        bev_index = paddle.to_tensor([0, 1, 3, 4, 6])
-        bbox_bev = paddle.index_select(gt_bboxes_3d, bev_index, axis=1)
+        # bev_index = paddle.to_tensor([0, 1, 3, 4, 6])
+        bev_index = [0, 1, 3, 4, 6]
+        bbox_bev = gt_bboxes_3d[:, bev_index]
+        # bbox_bev = paddle.index_select(gt_bboxes_3d, bev_index, axis=1)
         # bbox_bev = gt_bboxes_3d[:, [0, 1, 3, 4, 6]]
-        # mask1 = bbox_bev[:, 0] > bev_range[0]
-        # mask2 = bbox_bev[:, 1] > bev_range[1]
-        # mask3 = bbox_bev[:, 0] < bev_range[2]
-        # mask4 = bbox_bev[:, 1] < bev_range[3]
         mask = ((bbox_bev[:, 0] > bev_range[0])
                           & (bbox_bev[:, 1] > bev_range[1])
                           & (bbox_bev[:, 0] < bev_range[2])
@@ -339,10 +337,12 @@ class ObjectRangeFilter(TransformABC):
         # using mask to index gt_labels_3d will cause bug when
         # len(gt_labels_3d) == 1, where mask=1 will be interpreted
         # as gt_labels_3d[1] and cause out of index error
-        gt_labels_3d = gt_labels_3d[mask.numpy().astype(bool)]
+        gt_labels_3d = gt_labels_3d[mask.astype(bool)]
         gravity_center = gravity_center[mask]
         # limit rad to [-pi, pi]
-        gt_bboxes_3d[:, 6] = gt_bboxes_3d[:, 6] - paddle.floor(gt_bboxes_3d[:, 6] / (2*np.pi) + 0.5) * 2*np.pi
+        # gt_bboxes_3d = gt_bboxes_3d.numpy()
+        gt_bboxes_3d[:, 6] = gt_bboxes_3d[:, 6] - np.floor(gt_bboxes_3d[:, 6] / (2*np.pi) + 0.5) * 2*np.pi
+        # gt_bboxes_3d = paddle.to_tensor(gt_bboxes_3d, dtype='float32')
         sample['bboxes_3d'] = [gt_bboxes_3d]
         sample['labels'] = [gt_labels_3d]
         sample['gravity_center'] = [gravity_center]

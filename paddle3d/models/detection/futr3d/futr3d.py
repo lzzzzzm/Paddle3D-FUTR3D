@@ -150,6 +150,7 @@ class FUTR3D(nn.Layer):
             points = None
         if self.use_Cam:
             img = sample['img']
+            # img = paddle.transpose(img, (0, 1, 4, 2, 3))
             img_metas = sample['img_meta']
         else:
             img = None

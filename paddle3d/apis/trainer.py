@@ -129,7 +129,7 @@ class Trainer:
         self.resume = resume
         vdl_file_name = None
         self.iters_per_epoch = len(self.train_dataloader)
-        # for batch, index in enumerate(self.train_dataloader):
+        # for batch, data in enumerate(self.train_dataloader):
         #     print(batch)
 
 
