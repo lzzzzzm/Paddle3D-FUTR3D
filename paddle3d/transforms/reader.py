@@ -77,19 +77,15 @@ class Collect3D(TransformABC):
         if 'img' in self.key:
             collect_sample['img'] = paddle.stack([self.to_tensor(img) for img in sample.img])
             collect_sample['img_meta'] = sample.img_meta
-            # collect_sample.img = paddle.stack([self.to_tensor(img) for img in sample.img])
-            # collect_sample.img_meta = sample.img_meta
+
         if 'radar' in self.key:
             collect_sample['radar'] = self.to_tensor(sample.radar)
-            # collect_sample.radar = self.to_tensor(sample.radar)
+
         # collect label
         if sample.labels is not None:
             collect_sample.labels = sample.labels
             collect_sample.bboxes_3d = sample.bboxes_3d
             collect_sample['gravity_center'] = sample.gravity_center
-            # collect_sample.update({
-            #     'gravity_center': sample.gravity_center
-            # })
 
         return collect_sample
 
@@ -150,7 +146,7 @@ class LoadMultiViewImageFromFiles(TransformABC):
         for name in filename:
             name = name.replace('\\', '/')
             im = cv2.imread(name)
-            # im = cv2.resize(im, (416, 416))
+            # im = cv2.resize(im, (256, 256))
             img.append(im)
         img = np.array(img)
         img = np.transpose(img, (1, 2, 3, 0))
@@ -322,10 +318,10 @@ class ObjectRangeFilter(TransformABC):
         elif self.bbox_instance == 'CameraInstance3DBoxes':
             bev_range = paddle.to_tensor(self.pcd_range[[0, 2, 3, 5]], dtype='float32')
 
-        gt_bboxes_3d = sample['bboxes_3d']
-        gt_labels_3d = sample['labels']
+        gt_bboxes_3d = sample['bboxes_3d'][0]
+        gt_labels_3d = sample['labels'][0]
         if self.with_gravity_center:
-            gravity_center = sample['gravity_center']
+            gravity_center = sample['gravity_center'][0]
         bev_index = paddle.to_tensor([0, 1, 3, 4, 6])
         bbox_bev = paddle.index_select(gt_bboxes_3d, bev_index, axis=1)
         # bbox_bev = gt_bboxes_3d[:, [0, 1, 3, 4, 6]]
@@ -343,13 +339,13 @@ class ObjectRangeFilter(TransformABC):
         # using mask to index gt_labels_3d will cause bug when
         # len(gt_labels_3d) == 1, where mask=1 will be interpreted
         # as gt_labels_3d[1] and cause out of index error
-        gt_labels_3d = gt_labels_3d[mask.numpy().astype(np.bool)]
+        gt_labels_3d = gt_labels_3d[mask.numpy().astype(bool)]
         gravity_center = gravity_center[mask]
         # limit rad to [-pi, pi]
         gt_bboxes_3d[:, 6] = gt_bboxes_3d[:, 6] - paddle.floor(gt_bboxes_3d[:, 6] / (2*np.pi) + 0.5) * 2*np.pi
-        sample['bboxes_3d'] = gt_bboxes_3d
-        sample['labels'] = gt_labels_3d
-        sample['gravity_center'] = gravity_center
+        sample['bboxes_3d'] = [gt_bboxes_3d]
+        sample['labels'] = [gt_labels_3d]
+        sample['gravity_center'] = [gravity_center]
         return sample
 
 

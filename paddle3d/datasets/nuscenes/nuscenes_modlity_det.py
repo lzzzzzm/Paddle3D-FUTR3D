@@ -172,18 +172,22 @@ class NuscenesModlityDataset(BaseDataset):
             else:
                 gt_labels_3d.append(-1)
         gt_labels_3d = np.array(gt_labels_3d)
-        sample.labels = gt_labels_3d
+        sample.labels = []
+        sample.labels.append(gt_labels_3d)
         origin = np.array([0.5, 0.5, 0.5])
         dst = np.array([0.5, 0.5, 0])
         src = np.array(origin)
         gt_bboxes_3d[:, :3] += gt_bboxes_3d[:, 3:6] * (dst - src)
-        sample.bboxes_3d = paddle.to_tensor(gt_bboxes_3d, dtype='float32')
+        sample.bboxes_3d = []
+        sample.bboxes_3d.append(paddle.to_tensor(gt_bboxes_3d, dtype='float32'))
+        # sample.bboxes_3d = paddle.to_tensor(gt_bboxes_3d, dtype='float32')
         bottom_center = gt_bboxes_3d[:, :3]
         # calc gravity_center
         gravity_center = paddle.zeros_like(paddle.to_tensor(bottom_center), dtype='float32')
         gravity_center[:, :2] = bottom_center[:, :2]
         gravity_center[:, 2] = bottom_center[:, 2] + gt_bboxes_3d[:, 5] * 0.5
-        sample['gravity_center'] = gravity_center
+        sample['gravity_center'] = []
+        sample.gravity_center.append(gravity_center)
         return sample
 
     def get_data_info(self, index):
@@ -249,7 +253,34 @@ class NuscenesModlityDataset(BaseDataset):
     def collate_fn(self, batch: List):
         """
         """
+        # collate_sample = Sample(path=None, modality='multimodal')
         sample = batch[0]
+        # # img info collate
+        # if self.use_modality['use_camera']:
+        #     batch_img = paddle.stack([sample.img for sample in batch], axis=0)
+        #     batch_img_meta = np.stack([sample.img_meta for sample in batch], axis=0).squeeze(axis=-1)
+        #     collate_sample['img'] = batch_img
+        #     collate_sample['img_meta'] = batch_img_meta
+        # # radar info collate
+        # if self.use_modality['use_radar']:
+        #     batch_radar = paddle.stack([sample.radar for sample in batch], axis=0)
+        #     collate_sample['radar'] = batch_radar
+        # # label info
+        # if sample.labels is not None:
+        #     batch_labels = []
+        #     batch_bboxes_3d = []
+        #     batch_gravity_center = []
+        #     for i in range(len(batch)):
+        #         batch_labels.append(batch[i].labels)
+        #         batch_bboxes_3d.append(batch[i].bboxes_3d)
+        #         batch_gravity_center.append(batch[i].gravity_center)
+        #     batch_labels = np.array(batch_labels)
+        #     batch_bboxes_3d = np.array(batch_bboxes_3d)
+        #     batch_gravity_center = np.array(batch_gravity_center)
+        #     collate_sample['labels'] = batch_labels
+        #     collate_sample['bboxes_3d'] = batch_bboxes_3d
+        #     collate_sample['gravity_center'] = batch_gravity_center
+        # return collate_sample
         if isinstance(sample, np.ndarray):
             batch = np.stack(batch, axis=0)
             return batch

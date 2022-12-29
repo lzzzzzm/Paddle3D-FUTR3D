@@ -164,12 +164,6 @@ class DeformableFUTR3DHead(nn.Layer):
         hs = paddle.transpose(hs, (0, 2, 1, 3))
         outputs_classes = []
         outputs_coords = []
-        # hs = load_variavle('hs.txt')
-        # init_reference = load_variavle('init_reference.txt')
-        # inter_references = load_variavle('inter_references.txt')
-        # hs = paddle.to_tensor(hs)
-        # init_reference = paddle.to_tensor(init_reference)
-        # inter_references = paddle.to_tensor(inter_references)
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
@@ -215,6 +209,7 @@ class DeformableFUTR3DHead(nn.Layer):
                            gt_bboxes_ignore=None):
         num_bboxes = bbox_pred.shape[0]
         # assigner and sampler
+        gt_labels = gt_labels[0]
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
                                              gt_labels, gt_bboxes_ignore)
         sampling_result = self.sampler.sample(assign_result, bbox_pred,
@@ -338,8 +333,8 @@ class DeformableFUTR3DHead(nn.Layer):
         enc_bbox_preds = preds_dicts['enc_bbox_preds']
         num_dec_layers = len(all_cls_scores)
         new_gt_bboxes_list = []
-        for i in range(gt_bboxes_list.shape[0]):
-            new_gt_bboxes_list.append(paddle.concat((gravity_center_list[i], gt_bboxes_list[i][:, 3:]), axis=1))
+        for i in range(len(gt_bboxes_list)):
+            new_gt_bboxes_list.append(paddle.concat((gravity_center_list[i][0], gt_bboxes_list[i][0][:, 3:]), axis=1))
         # gt_bboxes_list = [paddle.concat((gravity_center, gt_bboxes[:, 3:]),axis=1) for gravity_center, gt_bboxes in zip(gravity_center_list, gt_bboxes_list)]
         all_gt_bboxes_list = [new_gt_bboxes_list for _ in range(num_dec_layers)]
         all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
