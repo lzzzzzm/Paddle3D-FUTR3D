@@ -34,8 +34,10 @@ class PseudoSampler(BaseSampler):
         """
         pos_inds = paddle.nonzero(
             assign_result.gt_inds > 0, as_tuple=False).squeeze(-1).unique()
+        pos_inds = paddle.to_tensor(pos_inds, dtype='int32')
         neg_inds = paddle.nonzero(
             assign_result.gt_inds == 0, as_tuple=False).squeeze(-1).unique()
+        neg_inds = paddle.to_tensor(neg_inds, dtype='int32')
         gt_flags = paddle.zeros((bboxes.shape[0],), dtype=paddle.uint8)
         # gt_flags = bboxes.new_zeros(bboxes.shape[0], dtype=paddle.uint8)
         sampling_result = SamplingResult(pos_inds, neg_inds, bboxes, gt_bboxes,
