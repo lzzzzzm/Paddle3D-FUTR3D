@@ -260,6 +260,8 @@ class DeformableFUTR3DHead(nn.Layer):
             gt_bboxes_list, gt_labels_list, gt_bboxes_ignore_list)
         num_total_pos = sum((paddle.numel(inds) for inds in pos_inds_list))
         num_total_neg = sum((paddle.numel(inds) for inds in neg_inds_list))
+        num_total_pos = paddle.to_tensor(num_total_pos, dtype='int32')
+        num_total_neg = paddle.to_tensor(num_total_neg, dtype='int32')
         return (labels_list, label_weights_list, bbox_targets_list,
                 bbox_weights_list, num_total_pos, num_total_neg)
 
