@@ -194,7 +194,7 @@ def main(args):
     })
 
     trainer = Trainer(**dic)
-    # trainer.train()
+    trainer.train()
 
 
 if __name__ == '__main__':
