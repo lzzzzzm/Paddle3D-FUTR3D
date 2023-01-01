@@ -8,12 +8,10 @@ import numpy as np
 
 from paddle3d.apis import manager
 from paddle3d.models.transformer.attention import MultiHeadAttention, FUTR3DCrossAtten, inverse_sigmoid
-from paddle3d.models.layers.param_init import xavier_uniform_, constant_
+from paddle3d.models.layers.param_init import xavier_uniform_init, constant_init
 
-__all__ = ["FUTR3DTransformer", 'FUTR3DTransformerDecoder', 'DetrTransformerDecoderLayer']
+__all__ = ["FUTR3DTransformer"]
 
-
-@manager.TRANSFORMER_LAYERS.add_component
 class DetrTransformerDecoderLayer(nn.Layer):
     def __init__(self,
                  embed_dims=256,
@@ -153,7 +151,6 @@ class DetrTransformerDecoderLayer(nn.Layer):
         return query
 
 
-@manager.TRANSFORMER_DECODER.add_component
 class FUTR3DTransformerDecoder(nn.Layer):
     def __init__(self,
                  use_LiDAR=False,
@@ -251,19 +248,56 @@ class FUTR3DTransformerDecoder(nn.Layer):
         return output, reference_points
 
 
-@manager.TRANSFORMER.add_component
+@manager.TRANSFORMERS.add_component
 class FUTR3DTransformer(nn.Layer):
     def __init__(self,
                  num_feature_levels=4,
                  num_cams=6,
                  two_stage_num_proposals=300,
-                 transformer_decoder=None,
+                 use_LiDAR=False,
+                 use_Radar=True,
+                 use_Cam=True,
+                 num_levels=4,
+                 num_layers=6,
+                 return_intermediate=True,
+                 embed_dims=256,
+                 num_heads=8,
+                 dropout=0.1,
+                 attn_dropout=0.1,
+                 radar_dims=64,
+                 radar_topk=30,
+                 im2col_step=64,
+                 use_dconv=True,
+                 feedforward_channels=512,
+                 feedforward_dropout=0.1,
+                 normalize_before=False,
+                 pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
                  reference_points_aug=False):
         super(FUTR3DTransformer, self).__init__()
         self.num_feature_levels = num_feature_levels
         self.num_cams = num_cams
         self.two_stage_num_proposals = two_stage_num_proposals
-        self.decoder = transformer_decoder
+        self.decoder = FUTR3DTransformerDecoder(
+            use_LiDAR=use_LiDAR,
+            use_Radar=use_Radar,
+            use_Cam=use_Cam,
+            num_levels=num_levels,
+            num_layers=num_layers,
+            return_intermediate=return_intermediate,
+            embed_dims=embed_dims,
+            num_heads=num_heads,
+            dropout=dropout,
+            attn_dropout=attn_dropout,
+            num_cams=num_cams,
+            radar_dims=radar_dims,
+            radar_topk=radar_topk,
+            im2col_step=im2col_step,
+            use_dconv=use_dconv,
+            feedforward_channels=feedforward_channels,
+            feedforward_dropout=feedforward_dropout,
+            normalize_before=normalize_before,
+            pc_range=pc_range
+        )
         self.reference_points_aug = reference_points_aug
         self.embed_dims = self.decoder.embed_dims
         # layer
@@ -273,10 +307,10 @@ class FUTR3DTransformer(nn.Layer):
     def init_weights(self):
         for p in self.parameters():
             if p.dim() > 1:
-                xavier_uniform_(p)
+                xavier_uniform_init(p)
 
-        xavier_uniform_(self.reference_points.weight)
-        constant_(self.reference_points.bias, 0)
+        xavier_uniform_init(self.reference_points.weight)
+        constant_init(self.reference_points.bias, value=0)
 
 
     def forward(self,

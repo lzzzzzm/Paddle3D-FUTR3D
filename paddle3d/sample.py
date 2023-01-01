@@ -54,7 +54,7 @@ class Sample(_EasyDict):
     """
     _VALID_MODALITIES = ["image", "lidar", "radar", "multimodal", "multiview"]
 
-    def __init__(self, path: str or dict, modality: str):
+    def __init__(self, path: str, modality: str):
         if modality not in self._VALID_MODALITIES:
             raise ValueError('Only modality {} is supported, but got {}'.format(
                 self._VALID_MODALITIES, modality))

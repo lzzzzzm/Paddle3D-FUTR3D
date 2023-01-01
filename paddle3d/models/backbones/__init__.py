@@ -17,3 +17,5 @@ from .hrnet import *
 from .resnet import *
 from .sac import *
 from .second_backbone import *
+from .vovnet import *
+from .vovnetcp import VoVNetCP

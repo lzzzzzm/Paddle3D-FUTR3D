@@ -13,4 +13,4 @@
 # limitations under the License.
 
 from .futr3d_attention import *
-from .multiheadattention import *
+from .self_attention import *

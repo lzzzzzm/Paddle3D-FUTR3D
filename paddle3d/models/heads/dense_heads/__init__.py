@@ -13,5 +13,8 @@
 # limitations under the License.
 
 from .anchor_head import *
+from .coders import NMSFreeCoder
+from .petr_head import PETRHead
+from .point_head import PointHeadSimple
 from .target_assigner import *
-from .futr3d_head import *
+from .futr3d_head import DeformableFUTR3DHead

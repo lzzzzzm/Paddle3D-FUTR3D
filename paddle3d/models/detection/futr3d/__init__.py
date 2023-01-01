@@ -12,6 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import futr3d, futr3d_utils
-from .futr3d import *
-from .futr3d_utils import *
+from .futr3d import FUTR3D

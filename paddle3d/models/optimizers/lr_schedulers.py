@@ -23,7 +23,7 @@ Apache-2.0 license [see LICENSE for details].
 from functools import partial
 
 import paddle
-from paddle.optimizer.lr import LRScheduler, LinearWarmup, MultiStepDecay
+from paddle.optimizer.lr import LRScheduler
 
 from paddle3d.apis import manager
 
@@ -32,6 +32,7 @@ from .utils import annealing_cos
 
 @manager.LR_SCHEDULERS.add_component
 class OneCycleWarmupDecayLr(LRScheduler):
+
     def __init__(self,
                  base_learning_rate,
                  lr_ratio_peak=10,
@@ -65,6 +66,7 @@ class OneCycleWarmupDecayLr(LRScheduler):
 
 
 class LRSchedulerCycle(LRScheduler):
+
     def __init__(self, total_step, lr_phases, mom_phases):
 
         self.total_step = total_step
@@ -76,12 +78,12 @@ class LRSchedulerCycle(LRScheduler):
             if isinstance(lambda_func, str):
                 lambda_func = eval(lambda_func)
             if i < len(lr_phases) - 1:
-                self.lr_phases.append((int(start * total_step),
-                                       int(lr_phases[i + 1][0] * total_step),
-                                       lambda_func))
+                self.lr_phases.append(
+                    (int(start * total_step),
+                     int(lr_phases[i + 1][0] * total_step), lambda_func))
             else:
-                self.lr_phases.append((int(start * total_step), total_step,
-                                       lambda_func))
+                self.lr_phases.append(
+                    (int(start * total_step), total_step, lambda_func))
         assert self.lr_phases[0][0] == 0
         self.mom_phases = []
         for i, (start, lambda_func) in enumerate(mom_phases):
@@ -90,18 +92,19 @@ class LRSchedulerCycle(LRScheduler):
             if isinstance(lambda_func, str):
                 lambda_func = eval(lambda_func)
             if i < len(mom_phases) - 1:
-                self.mom_phases.append((int(start * total_step),
-                                        int(mom_phases[i + 1][0] * total_step),
-                                        lambda_func))
+                self.mom_phases.append(
+                    (int(start * total_step),
+                     int(mom_phases[i + 1][0] * total_step), lambda_func))
             else:
-                self.mom_phases.append((int(start * total_step), total_step,
-                                        lambda_func))
+                self.mom_phases.append(
+                    (int(start * total_step), total_step, lambda_func))
         assert self.mom_phases[0][0] == 0
         super().__init__()
 
 
 @manager.OPTIMIZERS.add_component
 class OneCycle(LRSchedulerCycle):
+
     def __init__(self, total_step, lr_max, moms, div_factor, pct_start):
         self.lr_max = lr_max
         self.moms = moms
@@ -141,24 +144,40 @@ class OneCycle(LRSchedulerCycle):
     def get_mom(self):
         return self.last_moms
 
-@manager.OPTIMIZERS.add_component
-class LinearWarmupMultiStepDecay(LinearWarmup):
-    def __init__(self,
-                 learning_rate,
-                 warmup_steps,
-                 warmup_ratio,
-                 step,
-                 gamma=0.1
-                 ):
-        lr = MultiStepDecay(
-            learning_rate=learning_rate,
-            milestones=step,
-            gamma=gamma
-        )
 
-        super(LinearWarmupMultiStepDecay, self).__init__(
-            learning_rate=lr,
-            warmup_steps=warmup_steps,
-            start_lr=warmup_ratio,
-            end_lr=learning_rate
-        )
+@manager.LR_SCHEDULERS.add_component
+class CosineAnnealingDecayByEpoch(paddle.optimizer.lr.CosineAnnealingDecay):
+    iters_per_epoch = 1
+    warmup_iters = 0
+
+    def get_lr(self):
+        if self.last_epoch == 0:
+            return self.base_lr
+        else:
+            cur_epoch = (self.last_epoch +
+                         self.warmup_iters) // self.iters_per_epoch
+            return annealing_cos(self.base_lr, self.eta_min,
+                                 cur_epoch / self.T_max)
+
+    def _get_closed_form_lr(self):
+        return self.get_lr()
+
+@manager.LR_SCHEDULERS.add_component
+class MultiStepDecayByEpoch(paddle.optimizer.lr.MultiStepDecay):
+    iters_per_epoch = 1
+    warmup_iters = 0
+
+    def get_lr(self):
+        if self.last_epoch == 0:
+            return self.base_lr
+        else:
+            cur_epoch = (self.last_epoch +
+                         self.warmup_iters) // self.iters_per_epoch
+            for i in range(len(self.milestones)):
+                if cur_epoch < self.milestones[i]:
+                    return self.base_lr * (self.gamma ** i)
+            return self.base_lr * (self.gamma ** len(self.milestones))
+
+
+
+

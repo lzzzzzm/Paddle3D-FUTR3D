@@ -27,12 +27,6 @@ def parse_args():
         help='Name of the dataset: nuscenes, or kitti.',
         type=str)
     parser.add_argument(
-        '--nuscenes_version',
-        default='train',
-        dest='nuscenes_version',
-        help='version of the nuscenes dataset.',
-        type=str)
-    parser.add_argument(
         '--dataset_root',
         dest='dataset_root',
         help='Path of the dataset.',
@@ -47,7 +41,7 @@ def parse_args():
 
 def main(args):
     if args.dataset_name.lower() == 'nuscenes':
-        generate_nuscenes_gt_database(args.dataset_root, save_dir=args.save_dir, version=args.nuscenes_version)
+        generate_nuscenes_gt_database(args.dataset_root, save_dir=args.save_dir)
     elif args.dataset_name.lower() == 'kitti':
         generate_kitti_gt_database(args.dataset_root, save_dir=args.save_dir)
     else:

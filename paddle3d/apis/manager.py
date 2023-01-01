@@ -21,8 +21,7 @@ from paddle3d.utils.logger import logger
 __all__ = [
     'BACKBONES', 'MIDDLE_ENCODERS', 'MODELS', 'NECKS', 'VOXEL_ENCODERS',
     'LOSSES', 'DATASETS', 'TRANSFORMS', 'LR_SCHEDULERS', 'OPTIMIZERS',
-    'VOXELIZERS', 'HEADS', 'RADAR_ENCODER', 'BBOX_CODER', 'TRANSFORMER_LAYERS',
-    'TRANSFORMER_DECODER', 'TRANSFORMER', 'ASSIGNERS', 'SAMPLERS', 'MATCH_COSTS'
+    'VOXELIZERS', 'HEADS', 'POINT_ENCODERS', 'TRANSFORMERS'
 ]
 
 
@@ -153,11 +152,5 @@ TRANSFORMS = ComponentManager(name="transforms")
 LR_SCHEDULERS = ComponentManager(name="lr_schedulers")
 OPTIMIZERS = ComponentManager(name="optimizers")
 VOXELIZERS = ComponentManager(name="voxelizers")
-BBOX_CODER = ComponentManager(name='bbox_coder')
-RADAR_ENCODER = ComponentManager(name='radar_encoders')
-TRANSFORMER = ComponentManager(name='transformers')
-TRANSFORMER_DECODER = ComponentManager(name='transformer_decoders')
-TRANSFORMER_LAYERS = ComponentManager(name='transformer_layers')
-ASSIGNERS = ComponentManager(name='assigners')
-SAMPLERS = ComponentManager(name='samplers')
-MATCH_COSTS = ComponentManager(name='match_costs')
+POINT_ENCODERS = ComponentManager(name="point_encoders")
+TRANSFORMERS = ComponentManager(name="transformers")

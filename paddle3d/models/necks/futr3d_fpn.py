@@ -6,7 +6,7 @@ import paddle.nn.functional as F
 from paddle3d.models.layers import reset_parameters
 from paddle3d.apis import manager
 
-__all__ = ['FUTRFPN']
+__all__ = ['FUTR3D_FPN']
 
 
 class ConvModule(nn.Layer):
@@ -27,7 +27,7 @@ class ConvModule(nn.Layer):
                               padding=padding,
                               dilation=dilation,
                               groups=groups,
-                              weight_attr=nn.initializer.KaimingNormal(),
+                              weight_attr=nn.initializer.XavierUniform(),
                               bias_attr=False)
         self.bn = nn.BatchNorm2D(num_features=out_channels)
 
@@ -37,7 +37,7 @@ class ConvModule(nn.Layer):
         return out
 
 @manager.NECKS.add_component
-class FUTRFPN(nn.Layer):
+class FUTR3D_FPN(nn.Layer):
     r"""Feature Pyramid Network.
 
     This is an implementation of paper `Feature Pyramid Networks for Object
@@ -103,7 +103,7 @@ class FUTRFPN(nn.Layer):
                  add_extra_convs=False,
                  relu_before_extra_convs=False,
                  no_norm_on_lateral=False):
-        super(FUTRFPN, self).__init__()
+        super(FUTR3D_FPN, self).__init__()
         assert isinstance(in_channels, list)
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -163,6 +163,8 @@ class FUTRFPN(nn.Layer):
                     stride=2,
                     padding=1)
                 self.fpn_convs.append(extra_fpn_conv)
+
+
 
     def forward(self, inputs):
         """Forward function."""

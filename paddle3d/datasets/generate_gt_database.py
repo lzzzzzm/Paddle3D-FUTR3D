@@ -112,8 +112,7 @@ def generate_nuscenes_gt_database(dataset_root: str,
                                   load_point_dim: int = 5,
                                   use_point_dim: int = 4,
                                   use_time_lag: bool = True,
-                                  sweep_remove_radius: int = 1,
-                                  version: str='train'):
+                                  sweep_remove_radius: int = 1):
     if save_dir is None:
         save_dir = dataset_root
 
@@ -129,7 +128,7 @@ def generate_nuscenes_gt_database(dataset_root: str,
     ]
     dataset = NuscenesPCDataset(
         dataset_root=dataset_root,
-        mode=version,
+        mode='train',
         transforms=transforms,
         max_sweeps=max_sweeps,
         class_names=class_names)

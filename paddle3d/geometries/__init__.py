@@ -14,5 +14,4 @@
 
 from .bbox import BBoxes2D, BBoxes3D, CoordMode
 from .pointcloud import PointCloud
-from .radar import RadarPointCloud
 from .structure import StructureEncoder

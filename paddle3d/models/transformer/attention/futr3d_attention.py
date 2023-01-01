@@ -2,9 +2,9 @@ import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
 
-from paddle3d.models.transformer.attention.multiheadattention import  MultiHeadSelfAttention
+from paddle3d.models.transformer.attention.self_attention import MultiHeadSelfAttention
 from paddle3d.models.detection.futr3d.futr3d_utils import nan_to_num
-from paddle3d.models.layers.param_init import xavier_uniform_, constant_
+from paddle3d.models.layers.param_init import xavier_uniform_init, constant_init
 
 import numpy as np
 from scipy.spatial.distance import cdist
@@ -86,7 +86,7 @@ def gather(feature: paddle.Tensor, ind: paddle.Tensor):
 def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = []
     for img_meta in img_metas:
-        lidar2img.append(img_meta[0]['lidar2img'])
+        lidar2img.append(img_meta['lidar2img'])
     lidar2img = np.asarray(lidar2img)
     reference_points = reference_points.clone()
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
@@ -114,8 +114,9 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
     # img_metas['img_shape']=[900, 1600]
-    reference_points_cam[..., 0] /= img_metas[0][0]['img_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0][0]['img_shape'][0][0]
+    img_shape = img_metas[0]['img_shape'][0][1]
+    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
+    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
     mask = (mask & (reference_points_cam[..., 0:1] > -1.0)
             & (reference_points_cam[..., 0:1] < 1.0)
@@ -275,20 +276,20 @@ class FUTR3DCrossAtten(nn.Layer):
 
     def init_weights(self):
         if self.use_Cam:
-            constant_(self.attention_weights.weight, 0)
-            constant_(self.attention_weights.bias, 0)
-            constant_(self.img_output_proj.bias, 0)
-            xavier_uniform_(self.img_output_proj.weight)
+            constant_init(self.attention_weights.weight, value=0)
+            constant_init(self.attention_weights.bias, value=0)
+            constant_init(self.img_output_proj.bias, value=0)
+            xavier_uniform_init(self.img_output_proj.weight)
         if self.use_LiDAR:
-            constant_(self.pts_attention_weights.weight, 0)
-            constant_(self.pts_attention_weights.bias, 0)
-            constant_(self.pts_output_proj.bias, 0)
-            xavier_uniform_(self.pts_output_proj.weight)
+            constant_init(self.pts_attention_weights.weight, value=0)
+            constant_init(self.pts_attention_weights.bias, value=0)
+            constant_init(self.pts_output_proj.bias, value=0)
+            xavier_uniform_init(self.pts_output_proj.weight)
         if self.use_Radar:
-            constant_(self.radar_attention_weights.weight, 0)
-            constant_(self.radar_attention_weights.bias, 0)
-            constant_(self.radar_output_proj.bias, 0)
-            xavier_uniform_(self.radar_output_proj.weight)
+            constant_init(self.radar_attention_weights.weight, value=0)
+            constant_init(self.radar_attention_weights.bias, value=0)
+            constant_init(self.radar_output_proj.bias, value=0)
+            xavier_uniform_init(self.radar_output_proj.weight)
 
 
     def forward(self,

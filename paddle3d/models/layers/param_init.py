@@ -43,47 +43,6 @@ def constant_init(param, **kwargs):
     initializer = nn.initializer.Constant(**kwargs)
     initializer(param, param.block)
 
-def _no_grad_normal_(tensor, mean=0., std=1.):
-    with paddle.no_grad():
-        tensor.set_value(paddle.normal(mean=mean, std=std, shape=tensor.shape))
-    return tensor
-
-
-def _no_grad_fill_(tensor, value=0.):
-    with paddle.no_grad():
-        tensor.set_value(paddle.full_like(tensor, value, dtype=tensor.dtype))
-    return tensor
-
-def normal_(tensor, mean=0., std=1.):
-    """
-    Modified tensor inspace using normal_
-    Args:
-        tensor (paddle.Tensor): paddle Tensor
-        mean (float|int): mean value.
-        std (float|int): std value.
-    Return:
-        tensor
-    """
-    return _no_grad_normal_(tensor, mean, std)
-
-
-def constant_(tensor, value=0.):
-    """
-    Modified tensor inspace using constant_
-    Args:
-        tensor (paddle.Tensor): paddle Tensor
-        value (float|int): value to fill tensor.
-    Return:
-        tensor
-    """
-    return _no_grad_fill_(tensor, value)
-
-
-def bias_init_with_prob(prior_prob: float) -> float:
-    """initialize conv/fc bias value according to a given probability value."""
-    bias_init = float(-np.log((1 - prior_prob) / prior_prob))
-    return bias_init
-
 
 def normal_init(param, **kwargs):
     """
@@ -117,35 +76,12 @@ def uniform_init(param, a, b):
     """
     return _no_grad_uniform_(param, a, b)
 
-def xavier_uniform_(tensor, gain=1., reverse=False):
-    """
-    Modified tensor inspace using xavier_uniform_
-    Args:
-        tensor (paddle.Tensor): paddle Tensor
-        gain (float): super parameter, 1. default.
-        reverse (bool):  reverse (bool: False): tensor data format order, False by default as [fout, fin, ...].
-    Return:
-        tensor
-    """
+
+def xavier_normal_init(tensor, gain=1, reverse=False):
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor, reverse=reverse)
     std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
-    k = math.sqrt(3.0) * std
-    return _no_grad_uniform_(tensor, -k, k)
 
-
-def xavier_normal_(tensor, gain=1., reverse=False):
-    """
-    Modified tensor inspace using xavier_normal_
-    Args:
-        tensor (paddle.Tensor): paddle Tensor
-        gain (float): super parameter, 1. default.
-        reverse (bool):  reverse (bool: False): tensor data format order, False by default as [fout, fin, ...].
-    Return:
-        tensor
-    """
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor, reverse=reverse)
-    std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
-    return _no_grad_normal_(tensor, 0, std)
+    return _no_grad_normal_(tensor, 0., std)
 
 
 def kaiming_normal_init(tensor,
@@ -194,6 +130,22 @@ def kaiming_uniform_init(param,
     std = gain / math.sqrt(fan)
     k = math.sqrt(3.0) * std
     return _no_grad_uniform_(param, -k, k)
+
+
+def xavier_uniform_init(param, gain=1., reverse=False):
+    """
+    Modified tensor inspace using xavier_uniform method
+    Args:
+        param (paddle.Tensor): paddle Tensor
+        gain (float): a factor apply to std. Default: 1.
+    Return:
+        tensor
+    """
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(param, reverse=reverse)
+    std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
+    a = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+
+    return _no_grad_uniform_(param, -a, a)
 
 
 def _calculate_fan_in_and_fan_out(tensor, reverse=False):
@@ -260,7 +212,7 @@ def _calculate_gain(nonlinearity, param=None):
         else:
             raise ValueError(
                 "negative_slope {} not a valid number".format(param))
-        return math.sqrt(2.0 / (1 + negative_slope ** 2))
+        return math.sqrt(2.0 / (1 + negative_slope**2))
     elif nonlinearity == 'selu':
         return 3.0 / 4
     else:
@@ -275,9 +227,28 @@ def _no_grad_uniform_(tensor, a, b):
     return tensor
 
 
-def reset_parameters(m):
-    kaiming_uniform_init(m.weight, a=math.sqrt(5))
+def _no_grad_normal_(tensor, mean, std):
+    with paddle.no_grad():
+        tensor.set_value(paddle.normal(mean, std, shape=tensor.shape))
+    return tensor
+
+
+def reset_parameters(m, reverse=False):
+    if not hasattr(m, 'weight'):
+        return
+    if m.weight.ndim < 2:
+        return
+
+    if isinstance(m, nn.Linear):
+        reverse = True
+
+    kaiming_uniform_init(m.weight, a=math.sqrt(5), reverse=reverse)
     if m.bias is not None:
-        fan_in, _ = _calculate_fan_in_and_fan_out(m.weight)
+        fan_in, _ = _calculate_fan_in_and_fan_out(m.weight, reverse=reverse)
         bound = 1 / math.sqrt(fan_in)
         _no_grad_uniform_(m.bias, -bound, bound)
+
+
+def init_bias_by_prob(prob):
+    bias_val = float(-np.log((1 - prob) / prob))
+    return bias_val

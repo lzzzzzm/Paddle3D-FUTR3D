@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import second_fpn, fpn
+from . import second_fpn
+from . import fpn
+from .cp_fpn import CPFPN
 from .second_fpn import *
 from .fpn import *
+from .futr3d_fpn import *

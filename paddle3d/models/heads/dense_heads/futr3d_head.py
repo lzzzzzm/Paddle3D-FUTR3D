@@ -8,22 +8,14 @@ from functools import partial
 
 from paddle3d.models.transformer.attention import inverse_sigmoid
 from paddle3d.models.detection.futr3d.futr3d_utils import normalize_bbox, nan_to_num
-from paddle3d.models.layers.param_init import bias_init_with_prob,constant_
+from .samplers.pseudo_sampler import PseudoSampler
+from paddle3d.models.heads.dense_heads.target_assigner.hungarian_assigner import HungarianAssigner3D
+from paddle3d.models.layers.param_init import init_bias_by_prob,constant_init
 from paddle3d.apis import manager
 
-__all__ = ["DeformableFUTR3DHead"]
-import pickle
-def load_variavle(filename):
-   f=open(filename,'rb')
-   r=pickle.load(f)
-   f.close()
-   return r
+import numpy as np
 
-def save_variable(v, filename):
-    f = open(filename, 'wb')
-    pickle.dump(v, f)
-    f.close()
-    return filename
+__all__ = ["DeformableFUTR3DHead"]
 
 
 @manager.HEADS.add_component
@@ -38,8 +30,6 @@ class DeformableFUTR3DHead(nn.Layer):
                  as_two_stage=False,
                  bbox_coder=None,
                  transformer=None,
-                 assigner=None,
-                 sampler=None,
                  code_size=10,
                  code_weights=None,
                  num_cls_fcs=2,
@@ -61,11 +51,13 @@ class DeformableFUTR3DHead(nn.Layer):
         self.as_two_stage = as_two_stage
         self.code_size = code_size
         self.positional_encoding = positional_encoding
-        self.assigner = assigner
-        self.sampler = sampler
+        # assigner
+        self.assigner = HungarianAssigner3D(pc_range=pc_range)
+        # sampler
+        self.sampler = PseudoSampler()
+        # loss
         self.loss_cls = loss_cls
         self.loss_bbox = loss_bbox
-
         self.loss_iou = loss_iou
 
         self.num_cls_fcs = num_cls_fcs - 1
@@ -121,9 +113,9 @@ class DeformableFUTR3DHead(nn.Layer):
 
     def init_weights(self):
         if self.loss_cls.use_sigmoid:
-            bias_init = bias_init_with_prob(0.01)
+            bias_init = init_bias_by_prob(0.01)
             for m in self.cls_branches:
-                constant_(m[-1].bias, bias_init)
+                constant_init(m[-1].bias, value=bias_init)
 
     def get_bboxes(self, preds_dicts, img_metas):
         """Generate bboxes from bbox head predictions.
@@ -140,7 +132,6 @@ class DeformableFUTR3DHead(nn.Layer):
             preds = preds_dicts[i]
             bboxes = preds['bboxes']
             bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
-            # bboxes = img_metas[i]['box_type_3d'](bboxes, self.code_size-1)
             scores = preds['scores']
             labels = preds['labels']
             ret_list.append([bboxes, scores, labels])
@@ -186,7 +177,6 @@ class DeformableFUTR3DHead(nn.Layer):
             outputs_coords.append(outputs_coord)
         outputs_classes = paddle.stack(outputs_classes)
         outputs_coords = paddle.stack(outputs_coords)
-        # save_variable(outputs_coords.numpy(), 'outputs_coords.txt')
         outs = {
             'all_cls_scores': outputs_classes,
             'all_bbox_preds': outputs_coords,
@@ -209,7 +199,6 @@ class DeformableFUTR3DHead(nn.Layer):
                            gt_bboxes_ignore=None):
         num_bboxes = bbox_pred.shape[0]
         # assigner and sampler
-        gt_labels = gt_labels[0]
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
                                              gt_labels, gt_bboxes_ignore)
         sampling_result = self.sampler.sample(assign_result, bbox_pred,
@@ -325,7 +314,6 @@ class DeformableFUTR3DHead(nn.Layer):
     def loss(self,
              gt_bboxes_list,
              gt_labels_list,
-             gravity_center_list,
              preds_dicts,
              gt_bboxes_ignore=None):
 
@@ -334,11 +322,22 @@ class DeformableFUTR3DHead(nn.Layer):
         enc_cls_scores = preds_dicts['enc_cls_scores']
         enc_bbox_preds = preds_dicts['enc_bbox_preds']
         num_dec_layers = len(all_cls_scores)
-        new_gt_bboxes_list = []
-        for i in range(len(gt_bboxes_list)):
-            new_gt_bboxes_list.append(paddle.concat((gravity_center_list[i][0], gt_bboxes_list[i][0][:, 3:]), axis=1))
-        # gt_bboxes_list = [paddle.concat((gravity_center, gt_bboxes[:, 3:]),axis=1) for gravity_center, gt_bboxes in zip(gravity_center_list, gt_bboxes_list)]
-        all_gt_bboxes_list = [new_gt_bboxes_list for _ in range(num_dec_layers)]
+
+        def get_gravity_center(bboxes):
+            bottom_center = bboxes[:, :3]
+            gravity_center = np.zeros_like(bottom_center, dtype='float32')
+            gravity_center[:, :2] = bottom_center[:, :2]
+            gravity_center[:, 2] = bottom_center[:, 2] + bboxes[:, 5] * 0.5
+            return gravity_center
+
+        gt_bboxes_list = [
+            paddle.concat((paddle.to_tensor(get_gravity_center(gt_bboxes)),
+                           paddle.to_tensor(gt_bboxes[:, 3:])),
+                          axis=1) for gt_bboxes in gt_bboxes_list
+        ]
+        # new_gt_bboxes_list = [paddle.concat((gravity_center, gt_bboxes[:, 3:]),axis=1) for (gravity_center, gt_bboxes) in zip(gravity_center_list, gt_bboxes_list)]
+
+        all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
         all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
         all_gt_bboxes_ignore_list = [
             gt_bboxes_ignore for _ in range(num_dec_layers)
@@ -356,7 +355,7 @@ class DeformableFUTR3DHead(nn.Layer):
             ]
             enc_loss_cls, enc_losses_bbox = \
                 self.loss_single(enc_cls_scores, enc_bbox_preds,
-                                 new_gt_bboxes_list, binary_labels_list, gt_bboxes_ignore)
+                                 gt_bboxes_list, binary_labels_list, gt_bboxes_ignore)
             loss_dict['enc_loss_cls'] = enc_loss_cls
             loss_dict['enc_loss_bbox'] = enc_losses_bbox
 

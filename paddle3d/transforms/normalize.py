@@ -15,14 +15,13 @@
 from typing import Tuple
 
 import numpy as np
-import cv2
 
 from paddle3d.apis import manager
 from paddle3d.sample import Sample
 from paddle3d.transforms import functional as F
 from paddle3d.transforms.base import TransformABC
 
-__all__ = ["Normalize", "NormalizeRangeImage", "NormalizeMultiviewImage"]
+__all__ = ["Normalize", "NormalizeRangeImage"]
 
 
 @manager.TRANSFORMS.add_component
@@ -59,35 +58,6 @@ class Normalize(TransformABC):
                 std = np.array(self.std)
 
         sample.data = F.normalize(sample.data, mean, std)
-        return sample
-
-
-@manager.TRANSFORMS.add_component
-class NormalizeMultiviewImage(TransformABC):
-    """
-    only support ModlitySample
-    """
-
-    def __init__(self, mean: Tuple[float, float, float],
-                 std: Tuple[float, float, float]):
-        if not (isinstance(mean, (list, tuple))
-                and isinstance(std, (list, tuple))):
-            raise ValueError(
-                "{}: input type is invalid. It should be list or tuple".format(
-                    self))
-        self.mean = np.array(mean, dtype='float32')
-        self.std = np.array(std, dtype='float32')
-        from functools import reduce
-        if reduce(lambda x, y: x * y, self.std) == 0:
-            raise ValueError('{}: std is invalid!'.format(self))
-
-    def __call__(self, sample):
-        mean = np.float64(self.mean.reshape(1, -1))
-        stdinv = 1 / np.float64(self.std.reshape(1, -1))
-        for index in range(sample.img.shape[0]):
-            img = sample.img[index]
-            img = cv2.subtract(img, mean)
-            sample.img[index] = cv2.multiply(img, stdinv)
         return sample
 
 
