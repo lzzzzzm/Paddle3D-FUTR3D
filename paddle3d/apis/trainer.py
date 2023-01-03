@@ -131,10 +131,6 @@ class Trainer:
                                            dict) else dataloader_fn
 
         self.train_dataloader = _dataloader_build_fn(train_dataset, self.model)
-        # for index, data in enumerate(self.train_dataloader):
-        #     gt_labels_3d = data['gt_labels_3d'][0]
-        #     print(len(gt_labels_3d))
-        #     # print(index)
         self.eval_dataloader = _dataloader_build_fn(
             val_dataset, self.model) if val_dataset else None
         self.val_dataset = val_dataset

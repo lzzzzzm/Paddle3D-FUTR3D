@@ -21,7 +21,7 @@ from paddle3d.utils.logger import logger
 __all__ = [
     'BACKBONES', 'MIDDLE_ENCODERS', 'MODELS', 'NECKS', 'VOXEL_ENCODERS',
     'LOSSES', 'DATASETS', 'TRANSFORMS', 'LR_SCHEDULERS', 'OPTIMIZERS',
-    'VOXELIZERS', 'HEADS', 'POINT_ENCODERS', 'TRANSFORMERS'
+    'VOXELIZERS', 'HEADS', 'POINT_ENCODERS'
 ]
 
 
@@ -153,4 +153,3 @@ LR_SCHEDULERS = ComponentManager(name="lr_schedulers")
 OPTIMIZERS = ComponentManager(name="optimizers")
 VOXELIZERS = ComponentManager(name="voxelizers")
 POINT_ENCODERS = ComponentManager(name="point_encoders")
-TRANSFORMERS = ComponentManager(name="transformers")

@@ -477,6 +477,7 @@ class LoadMultiViewImageFromFiles(TransformABC):
         Call function to load multi-view image from files.
         """
         filename = sample['img_filename']
+
         img = np.stack(
             [cv2.imread(name, self.imread_flag) for name in filename], axis=-1)
         if self.to_float32:

@@ -23,6 +23,16 @@ train_dataset:
           'car', 'truck', 'construction_vehicle', 'bus', 'trailer',
           'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
       ]
+    - type: ResizeCropFlipImage
+      sample_aug_cfg:
+        resize_lim: [0.47, 0.625]
+        final_dim: [320, 800]
+        bot_pct_lim: [0.0, 0.0]
+        rot_lim: [0.0, 0.0]
+        H: 900
+        W: 1600
+        rand_flip: True
+      training: True
     - type: NormalizeMultiviewImage
       mean: [ 103.530, 116.280, 123.675 ]
       std: [1.0, 1.0, 1.0]
@@ -64,7 +74,7 @@ model:
     dcn_v2: True
     stage_with_dcn: [False, False, True, True]
     output_stride: None
-    frozen_stages: -1
+    # frozen_stages: -1
     frozen_norm: False
     preprocess: False
   neck:
@@ -81,7 +91,6 @@ model:
     num_classes: 10
     in_channels: 256
     embed_dims: 256
-    sync_cls_avg_factor: False
     with_box_refine: True
     as_two_stage: False
     code_size: 10
@@ -91,25 +100,30 @@ model:
     pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
     transformer:
       type: FUTR3DTransformer
-      num_layers: 6
-      return_intermediate: True
-      embed_dims: 256
-      num_heads: 8
-      dropout: 0.1
-      attn_dropout: 0.1
-      use_LiDAR: False
-      use_Cam: True
-      use_Radar: False
-      num_levels: 4
-      num_cams: 6
-      radar_dims: 64
-      radar_topk: 30
-      im2col_step: 64
-      use_dconv: True
-      feedforward_channels: 512
-      feedforward_dropout: 0.1
-      normalize_before: False
-      pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+      decoder:
+        type: FUTR3DTransformerDecoder
+        return_intermediate: True
+        num_layers: 6
+        transformerlayers:
+          type: DetrTransformerDecoderLayer
+          attns:
+            - type: MultiHeadAttention
+              embed_dims: 256
+              num_heads: 8
+              attn_drop: 0.1
+              drop_prob: 0.1
+            - type: FUTR3DCrossAtten
+              use_LiDAR: False
+              use_Radar: False
+              use_Cam: True
+              pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+              use_dconv: True
+              use_level_cam_embed: True
+              num_points: 1
+              embed_dims: 256
+          feedforward_channels: 512
+          ffn_dropout: 0.1
+          operation_order: ['self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm']
     bbox_coder:
       type: NMSFreeCoder
       post_center_range: [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0]

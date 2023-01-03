@@ -50,8 +50,8 @@ train_dataset:
 val_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
-  ann_file: data/nuscenes/petr_nuscenes_annotation_val.pkl
-  mode: mini_val
+  ann_file: data/nuscenes/nuscenes_infos_val.pkl
+  mode: val
   class_names: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer',
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']

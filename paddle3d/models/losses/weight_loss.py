@@ -79,7 +79,7 @@ class WeightedSmoothL1Loss(nn.Layer):
             loss = paddle.abs(diff)
         else:
             n_diff = paddle.abs(diff)
-            loss = paddle.where(n_diff < beta, 0.5 * n_diff ** 2 / beta,
+            loss = paddle.where(n_diff < beta, 0.5 * n_diff**2 / beta,
                                 n_diff - 0.5 * beta)
 
         return loss
@@ -184,103 +184,4 @@ class WeightedL1Loss(nn.Layer):
         elif self.reduction == 'sum':
             loss = loss.sum()
 
-        return loss * self.loss_weight
-
-
-def reduce_loss(loss, reduction):
-    """Reduce loss as specified.
-
-    Args:
-        loss (Tensor): Elementwise loss tensor.
-        reduction (str): Options are "none", "mean" and "sum".
-
-    Return:
-        Tensor: Reduced loss tensor.
-    """
-    # none: 0, elementwise_mean:1, sum: 2
-    if reduction == 'none':
-        return loss
-    elif reduction == 'mean':
-        return loss.mean()
-    elif reduction == 'sum':
-        return loss.sum()
-
-
-def weight_reduce_loss(loss, weight=None, reduction='mean', avg_factor=None):
-    """Apply element-wise weight and reduce loss.
-
-    Args:
-        loss (Tensor): Element-wise loss.
-        weight (Tensor): Element-wise weights.
-        reduction (str): Same as built-in losses of PyTorch.
-        avg_factor (float): Average factor when computing the mean of losses.
-
-    Returns:
-        Tensor: Processed loss values.
-    """
-    # if weight is specified, apply element-wise weight
-    if weight is not None:
-        loss = loss * weight
-
-    # if avg_factor is not specified, just reduce the loss
-    if avg_factor is None:
-        loss = reduce_loss(loss, reduction)
-    else:
-        # if reduction is mean, then average the loss by avg_factor
-        if reduction == 'mean':
-            # Avoid causing ZeroDivisionError when avg_factor is 0.0,
-            # i.e., all labels of an image belong to ignore index.
-            eps = 1.1920928955078125e-07
-            loss = loss.sum() / (avg_factor + eps)
-        # if reduction is 'none', then do nothing, otherwise raise an error
-        elif reduction != 'none':
-            raise ValueError('avg_factor can not be used with reduction="sum"')
-    return loss
-
-
-@manager.LOSSES.add_component
-class WeightavgL1Loss(nn.Layer):
-    def __init__(self, reduction='mean', loss_weight=1.0):
-        super(WeightavgL1Loss, self).__init__()
-        self.reduction = reduction
-        self.loss_weight = loss_weight
-
-    def calc_l1_loss(self, pred, target):
-        """L1 loss.
-
-        Args:
-            pred (torch.Tensor): The prediction.
-            target (torch.Tensor): The learning target of the prediction.
-
-        Returns:
-            torch.Tensor: Calculated loss
-        """
-        if target.numel() == 0:
-            return pred.sum() * 0
-
-        assert pred.shape == target.shape
-        loss = paddle.abs(pred - target)
-        return loss
-
-    def forward(self,
-                pred,
-                target,
-                weight=None,
-                avg_factor=None,
-                reduction_override=None):
-        """Forward function.
-
-        Args:
-            pred (torch.Tensor): The prediction.
-            target (torch.Tensor): The learning target of the prediction.
-            weight (torch.Tensor, optional): The weight of loss for each
-                prediction. Defaults to None.
-            avg_factor (int, optional): Average factor that is used to average
-                the loss. Defaults to None.
-            reduction_override (str, optional): The reduction method used to
-                override the original reduction method of the loss.
-                Defaults to None.
-        """
-        loss = self.calc_l1_loss(pred, target)
-        loss = weight_reduce_loss(loss, weight, self.reduction, avg_factor)
         return loss * self.loss_weight

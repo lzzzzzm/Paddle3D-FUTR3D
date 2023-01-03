@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .focal_loss import (FastFocalLoss, FocalLoss, MultiFocalLoss,
-                         SigmoidFocalClassificationLoss, sigmoid_focal_loss,
-                         WeightedFocalLoss)
-from .reg_loss import RegLoss
-from .iou_loss import IOULoss
-from .smooth_l1_loss import smooth_l1_loss
-from .disentangled_box3d_loss import DisentangledBox3DLoss, unproject_points2d
-from .weight_loss import (WeightedCrossEntropyLoss, WeightedSmoothL1Loss,
-                          get_corner_loss_lidar)
+__version__ = "1.0.0"
+
+import paddle
+from packaging.version import Version
+
+paddle_version = Version(paddle.__version__)
+minimum_paddle_version = Version("2.4.0")
+develop_version = Version("0.0.0")
+
+if paddle_version < minimum_paddle_version and paddle_version != develop_version:
+    raise RuntimeError("Please upgrade PaddlePaddle version to {}".format(
+        minimum_paddle_version))
+
+from . import datasets, models, transforms
