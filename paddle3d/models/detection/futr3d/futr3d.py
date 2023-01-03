@@ -35,6 +35,13 @@ class FUTR3D(BaseMultiViewModel):
         self.backbone = backbone
         self.neck = neck
         self.radar_encoder = radar_encoder
+        # init weights
+        self.init_weights()
+
+    def init_weights(self, bias_lr_factor=0.1):
+        for _, param in self.backbone.named_parameters():
+            param.optimize_attr['learning_rate'] = bias_lr_factor
+        self.head.init_weights()
 
     def extract_img_feat(self, img, img_metas=None):
         """

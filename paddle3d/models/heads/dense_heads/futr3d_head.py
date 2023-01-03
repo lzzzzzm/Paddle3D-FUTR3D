@@ -6,16 +6,45 @@ from paddle.distributed import reduce
 import copy
 from functools import partial
 
-from paddle3d.models.transformer.attention import inverse_sigmoid
+# from paddle3d.models.transformer.attention import inverse_sigmoid
 from paddle3d.models.detection.futr3d.futr3d_utils import normalize_bbox, nan_to_num
 from .samplers.pseudo_sampler import PseudoSampler
 from paddle3d.models.heads.dense_heads.target_assigner.hungarian_assigner import HungarianAssigner3D
-from paddle3d.models.layers.param_init import init_bias_by_prob,constant_init
+from paddle3d.models.layers.param_init import init_bias_by_prob, constant_init
 from paddle3d.apis import manager
 
 import numpy as np
 
 __all__ = ["DeformableFUTR3DHead"]
+
+
+def inverse_sigmoid(x, eps=1e-5):
+    """Inverse function of sigmoid.
+
+    Args:
+        x (Tensor): The tensor to do the
+            inverse.
+        eps (float): EPS avoid numerical
+            overflow. Defaults 1e-5.
+    Returns:
+        Tensor: The x has passed the inverse
+            function of sigmoid, has same
+            shape with input.
+    """
+    x = paddle.clip(x, min=0, max=1)
+    x1 = paddle.clip(x, min=eps)
+    x2 = paddle.clip((1 - x), min=eps)
+    return paddle.log(x1 / x2)
+
+
+def reduce_mean(tensor):
+    """"Obtain the mean of tensor on different GPUs."""
+    if not paddle.distributed.is_initialized():
+        return tensor
+    tensor = tensor.clone()
+    paddle.distributed.all_reduce(
+        tensor.scale_(1. / paddle.distributed.get_world_size()))
+    return tensor
 
 
 @manager.HEADS.add_component
@@ -72,6 +101,7 @@ class DeformableFUTR3DHead(nn.Layer):
         # model layers
         self.bbox_coder = bbox_coder
         self.transformer = transformer
+        self.pd_eps = paddle.to_tensor(np.finfo('float32').eps)
         # cls Layer
         cls_branch = []
         for _ in range(self.num_reg_fcs):
@@ -109,9 +139,9 @@ class DeformableFUTR3DHead(nn.Layer):
             self.query_embedding = nn.Embedding(self.num_query,
                                                 self.embed_dims * 2)
 
-        self.init_weights()
-
     def init_weights(self):
+        """Initialize weights of the DeformDETR head."""
+        self.transformer.init_weights()
         if self.loss_cls.use_sigmoid:
             bias_init = init_bias_by_prob(0.01)
             for m in self.cls_branches:
@@ -207,12 +237,10 @@ class DeformableFUTR3DHead(nn.Layer):
         neg_inds = sampling_result.neg_inds
 
         # label targets
-        # labels = paddle.full_like(num_bboxes, self.num_classes, dtype='long')
         labels = paddle.full((num_bboxes,), self.num_classes, dtype='int32')
         gt_labels = paddle.to_tensor(gt_labels, dtype='int32')
 
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
-        # label_weights = gt_bboxes.new_ones(num_bboxes)
         label_weights = paddle.ones(shape=(num_bboxes,), dtype=gt_bboxes.dtype)
 
         # bbox targets
@@ -221,11 +249,6 @@ class DeformableFUTR3DHead(nn.Layer):
         updates = paddle.ones(shape=bbox_weights.shape)
         for i in range(len(pos_inds)):
             bbox_weights[pos_inds[i]] = updates[i]
-        # bbox_weights[pos_inds] = 1.0
-
-        # DETR
-        # for i in range(len(pos_inds)):
-        #     bbox_weights[pos_inds[i]] = updates[i]
         bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds)
@@ -242,15 +265,12 @@ class DeformableFUTR3DHead(nn.Layer):
         gt_bboxes_ignore_list = [
             gt_bboxes_ignore_list for _ in range(num_imgs)
         ]
-
         (labels_list, label_weights_list, bbox_targets_list,
          bbox_weights_list, pos_inds_list, neg_inds_list) = self.multi_apply(
             self._get_target_single, cls_scores_list, bbox_preds_list,
             gt_bboxes_list, gt_labels_list, gt_bboxes_ignore_list)
         num_total_pos = sum((paddle.numel(inds) for inds in pos_inds_list))
         num_total_neg = sum((paddle.numel(inds) for inds in neg_inds_list))
-        num_total_pos = paddle.to_tensor(num_total_pos, dtype='int32')
-        num_total_neg = paddle.to_tensor(num_total_neg, dtype='int32')
         return (labels_list, label_weights_list, bbox_targets_list,
                 bbox_weights_list, num_total_pos, num_total_neg)
 
@@ -260,55 +280,69 @@ class DeformableFUTR3DHead(nn.Layer):
                     gt_bboxes_list,
                     gt_labels_list,
                     gt_bboxes_ignore_list=None):
+        """"Loss function for outputs from a single decoder layer of a single
+        feature level.
+        Args:
+            cls_scores (Tensor): Box score logits from a single decoder layer
+                for all images. Shape [bs, num_query, cls_out_channels].
+            bbox_preds (Tensor): Sigmoid outputs from a single decoder layer
+                for all images, with normalized coordinate (cx, cy, w, h) and
+                shape [bs, num_query, 4].
+            gt_bboxes_list (list[Tensor]): Ground truth bboxes for each image
+                with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
+            gt_labels_list (list[Tensor]): Ground truth class indices for each
+                image with shape (num_gts, ).
+            gt_bboxes_ignore_list (list[Tensor], optional): Bounding
+                boxes which can be ignored for each image. Default None.
+        Returns:
+            dict[str, Tensor]: A dictionary of loss components for outputs from
+                a single decoder layer.
+        """
         num_imgs = cls_scores.shape[0]
         cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
         bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]
         cls_reg_targets = self.get_targets(cls_scores_list, bbox_preds_list,
-                                           gt_bboxes_list, gt_labels_list, gt_bboxes_ignore_list)
+                                           gt_bboxes_list, gt_labels_list,
+                                           gt_bboxes_ignore_list)
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg) = cls_reg_targets
         labels = paddle.concat(labels_list, 0)
         label_weights = paddle.concat(label_weights_list, 0)
         bbox_targets = paddle.concat(bbox_targets_list, 0)
         bbox_weights = paddle.concat(bbox_weights_list, 0)
+
         # classification loss
-        cls_scores = cls_scores.reshape((-1, self.cls_out_channels))
+        cls_scores = cls_scores.reshape([-1, self.cls_out_channels])
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
                          num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
-            cls_avg_factor = reduce(paddle.tensor(cls_avg_factor, dtype=cls_scores.dtype))
+            cls_avg_factor = reduce_mean(
+                paddle.to_tensor([cls_avg_factor], dtype=cls_scores.dtype))
 
         cls_avg_factor = max(cls_avg_factor, 1)
-        # TODO label_weights, avg_factor
-        loss_cls = self.loss_cls(cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
+        loss_cls = self.loss_cls(cls_scores, labels,
+                                 label_weights) / (cls_avg_factor + self.pd_eps)
 
         # Compute the average number of gt boxes accross all gpus, for
         # normalization purposes
-        num_total_pos = paddle.to_tensor(num_total_pos)
-        if self.sync_cls_avg_factor:
-            clip_total_pos = reduce(num_total_pos, 0)
-        else:
-            clip_total_pos = num_total_pos
-        num_total_pos = paddle.clip(clip_total_pos, min=1)
+        num_total_pos = paddle.to_tensor([num_total_pos], dtype=loss_cls.dtype)
+        num_total_pos = paddle.clip(reduce_mean(num_total_pos), min=1).item()
+
         # regression L1 loss
-        bbox_preds = bbox_preds.reshape((-1, bbox_preds.shape[-1]))
+        bbox_preds = bbox_preds.reshape([-1, bbox_preds.shape[-1]])
         normalized_bbox_targets = normalize_bbox(bbox_targets, self.pc_range)
+        # paddle.all
         isnotnan = paddle.isfinite(normalized_bbox_targets).all(axis=-1)
         bbox_weights = bbox_weights * self.code_weights
-        isnotnan = isnotnan.unsqueeze(-1).tile([1, self.code_size])
-        loss_bbox_preds = paddle.masked_select(bbox_preds[:, :self.code_size], isnotnan).reshape((-1, self.code_size))
-        loss_normalized_bbox_targets = paddle.masked_select(normalized_bbox_targets[:, :self.code_size],
-                                                            isnotnan).reshape((-1, self.code_size))
-        loss_bbox_weights = paddle.masked_select(bbox_weights[:, :self.code_size], isnotnan).reshape(
-            (-1, self.code_size))
+
         loss_bbox = self.loss_bbox(
-            loss_bbox_preds,
-            loss_normalized_bbox_targets,
-            loss_bbox_weights, avg_factor=num_total_pos)
+            bbox_preds[isnotnan], normalized_bbox_targets[isnotnan],
+            bbox_weights[isnotnan]) / (num_total_pos + self.pd_eps)
 
         loss_cls = nan_to_num(loss_cls)
         loss_bbox = nan_to_num(loss_bbox)
+
         return loss_cls, loss_bbox
 
     def loss(self,
@@ -335,8 +369,6 @@ class DeformableFUTR3DHead(nn.Layer):
                            paddle.to_tensor(gt_bboxes[:, 3:])),
                           axis=1) for gt_bboxes in gt_bboxes_list
         ]
-        # new_gt_bboxes_list = [paddle.concat((gravity_center, gt_bboxes[:, 3:]),axis=1) for (gravity_center, gt_bboxes) in zip(gravity_center_list, gt_bboxes_list)]
-
         all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
         all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
         all_gt_bboxes_ignore_list = [

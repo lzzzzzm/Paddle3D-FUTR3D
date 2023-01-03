@@ -2,27 +2,13 @@ import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
 
-from paddle3d.models.transformer.attention.self_attention import MultiHeadSelfAttention
+# from paddle3d.models.transformer.attention.self_attention import MultiHeadSelfAttention
 from paddle3d.models.detection.futr3d.futr3d_utils import nan_to_num
 from paddle3d.models.layers.param_init import xavier_uniform_init, constant_init
+from paddle3d.apis import manager
 
 import numpy as np
 from scipy.spatial.distance import cdist
-import pickle
-
-
-def save_variable(v, filename):
-    f = open(filename, 'wb')
-    pickle.dump(v, f)
-    f.close()
-    return filename
-
-def load_variavle(filename):
-   f=open(filename,'rb')
-   r=pickle.load(f)
-   f.close()
-   return r
-
 
 def convert_attention_mask(attn_mask, dtype):
     """
@@ -64,7 +50,6 @@ def inverse_sigmoid(x, eps=1e-5):
     return paddle.log(x1 / x2)
 
 
-
 def gather(feature: paddle.Tensor, ind: paddle.Tensor):
     """Simplified version of torch.gather. Always gather based on axis 1.
     Args:
@@ -82,7 +67,6 @@ def gather(feature: paddle.Tensor, ind: paddle.Tensor):
     return feature.gather_nd(ind)
 
 
-
 def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = []
     for img_meta in img_metas:
@@ -92,11 +76,11 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
     # lidar2img = reference_points.new_tensor(lidar2img)  # (B, N, 4, 4)
     reference_points_3d = reference_points.clone()
-    reference_points = reference_points.numpy()
+    # reference_points = reference_points.numpy()
     reference_points[..., 0:1] = reference_points[..., 0:1] * (pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2] * (pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3] * (pc_range[5] - pc_range[2]) + pc_range[2]
-    reference_points = paddle.to_tensor(reference_points)
+    # reference_points = paddle.to_tensor(reference_points)
     B, num_query = reference_points.shape[:2]
 
     # reference_points (B, num_queries, 4)
@@ -151,54 +135,54 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     return reference_points_3d, sampled_feats, mask
 
 
-class MultiHeadAttention(nn.Layer):
-    def __init__(self,
-                 embed_dim,
-                 num_heads,
-                 attn_drop=0.,
-                 proj_drop=0.):
-        super(MultiHeadAttention, self).__init__()
-        self.proj_drop = nn.Dropout(proj_drop)
+# class MultiHeadAttention(nn.Layer):
+#     def __init__(self,
+#                  embed_dim,
+#                  num_heads,
+#                  attn_drop=0.,
+#                  proj_drop=0.):
+#         super(MultiHeadAttention, self).__init__()
+#         self.proj_drop = nn.Dropout(proj_drop)
+#
+#         self.attn = MultiHeadSelfAttention(
+#             embed_dim=embed_dim,
+#             num_heads=num_heads
+#         )
+#
+#     def forward(self,
+#                 query,
+#                 key=None,
+#                 value=None,
+#                 identity=None,
+#                 query_pos=None,
+#                 key_pos=None,
+#                 attn_mask=None,
+#                 key_padding_mask=None):
+#         if key is None:
+#             key = query
+#         if value is None:
+#             value = key
+#         if identity is None:
+#             identity = query
+#         if key_pos is None:
+#             if query_pos is not None:
+#                 # use query_pos if key_pos is not available
+#                 if query_pos.shape == key.shape:
+#                     key_pos = query_pos
+#         if query_pos is not None:
+#             query = query + query_pos
+#         if key_pos is not None:
+#             key = key + key_pos
+#         out = self.attn(query=query, key=key, value=value)
+#         return identity + self.proj_drop(out)
 
-        self.attn = MultiHeadSelfAttention(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            attn_drop=attn_drop
-        )
 
-    def forward(self,
-                query,
-                key=None,
-                value=None,
-                identity=None,
-                query_pos=None,
-                key_pos=None,
-                attn_mask=None,
-                key_padding_mask=None):
-        if key is None:
-            key = query
-        if value is None:
-            value = key
-        if identity is None:
-            identity = query
-        if key_pos is None:
-            if query_pos is not None:
-                # use query_pos if key_pos is not available
-                if query_pos.shape == key.shape:
-                    key_pos = query_pos
-        if query_pos is not None:
-            query = query + query_pos
-        if key_pos is not None:
-            key = key + key_pos
-        out = self.attn(query=query, key=key, value=value)
-        return identity + self.proj_drop(out)
-
-
+@manager.MODELS.add_component
 class FUTR3DCrossAtten(nn.Layer):
     def __init__(self,
                  use_LiDAR=True,
                  use_Cam=False,
-                 use_Radar=True,
+                 use_Radar=False,
                  embed_dims=256,
                  num_heads=8,
                  num_levels=4,
@@ -292,24 +276,21 @@ class FUTR3DCrossAtten(nn.Layer):
             constant_init(self.radar_output_proj.bias, value=0)
             xavier_uniform_init(self.radar_output_proj.weight)
 
-
     def forward(self,
                 query,
-                key,
-                value,
+                key=None,
+                value=None,
                 identity=None,
                 query_pos=None,
                 key_pos=None,
-                attn_masks=None,
+                attn_mask=None,
                 key_padding_mask=None,
-                reference_points=None,
-                spatial_shapes=None,
-                level_start_index=None,
-                img_feats=None,
-                pts_feats=None,
-                rad_feats=None,
-                img_metas=None):
-        # save_variable(query.numpy(), 'self_attn.txt')
+                **kwargs
+                ):
+        img_feats = kwargs['img_feats']
+        rad_feats = kwargs['rad_feats']
+        reference_points = kwargs['reference_points']
+        img_metas = kwargs['img_metas']
 
         if key is None:
             key = query

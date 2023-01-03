@@ -70,5 +70,4 @@ class MultiHeadSelfAttention(nn.Layer):
         att = att.transpose((0, 2, 1, 3)).reshape((batch, n, self.dim_v))  # batch, n, dim_v
         out = self.out(att)
         out = self.proj_drop(out).transpose((1, 0, 2))
-        # att = self.out(att).transpose((1, 0, 2))
         return out

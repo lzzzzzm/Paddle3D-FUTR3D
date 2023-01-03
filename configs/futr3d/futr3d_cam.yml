@@ -64,8 +64,8 @@ model:
     dcn_v2: True
     stage_with_dcn: [False, False, True, True]
     output_stride: None
-    frozen_stages: 1
-    frozen_norm: True
+    frozen_stages: -1
+    frozen_norm: False
     preprocess: False
   neck:
     type: FUTR3D_FPN
@@ -122,9 +122,11 @@ model:
       gamma: 2.0
       alpha: 0.25
       loss_weight: 2.0
+      reduction: sum
     loss_bbox:
-      type: WeightavgL1Loss
+      type: WeightedL1Loss
       loss_weight: 0.25
+      reduction: sum
 
 
 optimizer:
@@ -142,5 +144,5 @@ lr_scheduler:
     milestones: [21, 23]
     gamma: 0.1
   warmup_steps: 500
-  start_lr: 0.0
+  start_lr: 0.00006666666
   end_lr: 0.0001

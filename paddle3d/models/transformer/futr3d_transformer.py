@@ -10,6 +10,7 @@ from paddle3d.apis import manager
 from paddle3d.models.transformer.attention import MultiHeadAttention, FUTR3DCrossAtten, inverse_sigmoid
 from paddle3d.models.layers.param_init import xavier_uniform_init, constant_init
 
+
 __all__ = ["FUTR3DTransformer"]
 
 class DetrTransformerDecoderLayer(nn.Layer):
@@ -302,7 +303,6 @@ class FUTR3DTransformer(nn.Layer):
         self.embed_dims = self.decoder.embed_dims
         # layer
         self.reference_points = nn.Linear(self.embed_dims, 3)
-        self.init_weights()
 
     def init_weights(self):
         for p in self.parameters():

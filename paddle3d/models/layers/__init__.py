@@ -18,6 +18,9 @@ from .param_init import *
 from .petr_transformer import (PETRDNTransformer, PETRTransformer,
                                PETRTransformerDecoder,
                                PETRTransformerDecoderLayer)
+from .futr3d_transformer import (FUTR3DTransformer, DetrTransformerDecoderLayer,
+                                 FUTR3DTransformerDecoder)
 from .positional_encoding import SinePositionalEncoding3D
 from .pyramid_pool import *
 from .normalization import *
+from .attention import *
