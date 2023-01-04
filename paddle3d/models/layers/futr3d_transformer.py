@@ -200,7 +200,7 @@ class FUTR3DTransformerDecoder(TransformerLayerSequence):
 
     def __init__(self,
                  *args,
-                 post_norm_cfg=dict(type='LN'),
+                 post_norm_cfg=None,
                  return_intermediate=False,
                  **kwargs):
 

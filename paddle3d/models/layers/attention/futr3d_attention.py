@@ -2,34 +2,12 @@ import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
 
-# from paddle3d.models.transformer.attention.self_attention import MultiHeadSelfAttention
 from paddle3d.models.detection.futr3d.futr3d_utils import nan_to_num
 from paddle3d.models.layers.param_init import xavier_uniform_init, constant_init
 from paddle3d.apis import manager
 
 import numpy as np
 from scipy.spatial.distance import cdist
-
-def convert_attention_mask(attn_mask, dtype):
-    """
-    Convert the attention mask to the target dtype we expect.
-    Parameters:
-        attn_mask (Tensor, optional): A tensor used in multi-head attention
-                to prevents attention to some unwanted positions, usually the
-                paddings or the subsequent positions. It is a tensor with shape
-                broadcasted to `[batch_size, n_head, sequence_length, sequence_length]`.
-                When the data type is bool, the unwanted positions have `False`
-                values and the others have `True` values. When the data type is
-                int, the unwanted positions have 0 values and the others have 1
-                values. When the data type is float, the unwanted positions have
-                `-INF` values and the others have 0 values. It can be None when
-                nothing wanted or needed to be prevented attention to. Default None.
-        dtype (VarType): The target type of `attn_mask` we expect.
-    Returns:
-        Tensor: A Tensor with shape same as input `attn_mask`, with data type `dtype`.
-    """
-    return nn.layer.transformer._convert_attention_mask(attn_mask, dtype)
-
 
 def inverse_sigmoid(x, eps=1e-5):
     """Inverse function of sigmoid.
@@ -50,23 +28,6 @@ def inverse_sigmoid(x, eps=1e-5):
     return paddle.log(x1 / x2)
 
 
-def gather(feature: paddle.Tensor, ind: paddle.Tensor):
-    """Simplified version of torch.gather. Always gather based on axis 1.
-    Args:
-        feature: all results in 3 dimensions, such as [n, h * w, c]
-        ind: positive index in 3 dimensions, such as [n, k, 1]
-    Returns:
-        gather feature
-    """
-    bs_ind = paddle.arange(ind.shape[0], dtype=ind.dtype)
-    bs_ind = bs_ind.unsqueeze(1).unsqueeze(2)
-    print(bs_ind.shape)
-    bs_ind = bs_ind.expand([ind.shape[0], ind.shape[1], 1])
-    ind = paddle.concat([bs_ind, ind], axis=-1)
-
-    return feature.gather_nd(ind)
-
-
 def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = []
     for img_meta in img_metas:
@@ -76,11 +37,9 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
     # lidar2img = reference_points.new_tensor(lidar2img)  # (B, N, 4, 4)
     reference_points_3d = reference_points.clone()
-    # reference_points = reference_points.numpy()
     reference_points[..., 0:1] = reference_points[..., 0:1] * (pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2] * (pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3] * (pc_range[5] - pc_range[2]) + pc_range[2]
-    # reference_points = paddle.to_tensor(reference_points)
     B, num_query = reference_points.shape[:2]
 
     # reference_points (B, num_queries, 4)
@@ -98,7 +57,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
     # img_metas['img_shape']=[900, 1600]
-    img_shape = img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
@@ -113,7 +71,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # mask = nan_to_num(mask)
     sampled_feats = []
     num_points = 1
-    reference_points_cam = paddle.to_tensor(reference_points_cam)
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
         # feat_flip = paddle.flip(feat, [-1])
@@ -134,47 +91,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # ref_point_3d (B, N, num_query, 3)  maks (B, N, num_query, 1)
     return reference_points_3d, sampled_feats, mask
 
-
-# class MultiHeadAttention(nn.Layer):
-#     def __init__(self,
-#                  embed_dim,
-#                  num_heads,
-#                  attn_drop=0.,
-#                  proj_drop=0.):
-#         super(MultiHeadAttention, self).__init__()
-#         self.proj_drop = nn.Dropout(proj_drop)
-#
-#         self.attn = MultiHeadSelfAttention(
-#             embed_dim=embed_dim,
-#             num_heads=num_heads
-#         )
-#
-#     def forward(self,
-#                 query,
-#                 key=None,
-#                 value=None,
-#                 identity=None,
-#                 query_pos=None,
-#                 key_pos=None,
-#                 attn_mask=None,
-#                 key_padding_mask=None):
-#         if key is None:
-#             key = query
-#         if value is None:
-#             value = key
-#         if identity is None:
-#             identity = query
-#         if key_pos is None:
-#             if query_pos is not None:
-#                 # use query_pos if key_pos is not available
-#                 if query_pos.shape == key.shape:
-#                     key_pos = query_pos
-#         if query_pos is not None:
-#             query = query + query_pos
-#         if key_pos is not None:
-#             key = key + key_pos
-#         out = self.attn(query=query, key=key, value=value)
-#         return identity + self.proj_drop(out)
 
 
 @manager.MODELS.add_component
