@@ -8,7 +8,14 @@ from paddle3d.models.layers.param_init import (constant_init,
                                                xavier_uniform_init)
 
 from .transformer_layers import BaseTransformerLayer, TransformerLayerSequence
+import pickle
 
+
+def save_variable(v, filename):
+    f = open(filename, 'wb')
+    pickle.dump(v, f)
+    f.close()
+    return filename
 
 def inverse_sigmoid(x, eps=1e-5):
     """Inverse function of sigmoid.
@@ -223,7 +230,7 @@ class FUTR3DTransformerDecoder(TransformerLayerSequence):
         intermediate_reference_points = []
         for lid, layer in enumerate(self.layers):
             reference_points_input = reference_points
-            output = layer(query,
+            output = layer(output,
                            reference_points=reference_points_input,
                            *args,
                            **kwargs)
@@ -234,7 +241,9 @@ class FUTR3DTransformerDecoder(TransformerLayerSequence):
                 new_reference_points = paddle.zeros_like(reference_points)
                 new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points[..., :2])
                 new_reference_points[..., 2:3] = tmp[..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
-                reference_points = F.sigmoid(new_reference_points)
+                new_reference_points = F.sigmoid(new_reference_points)
+                reference_points = new_reference_points
+
             output = paddle.transpose(output, (1, 0, 2))
             if self.return_intermediate:
                 intermediate.append(output)
