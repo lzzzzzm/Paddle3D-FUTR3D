@@ -1,12 +1,10 @@
 import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
-from paddle.distributed import reduce
 
 import copy
 from functools import partial
 
-# from paddle3d.models.transformer.attention import inverse_sigmoid
 from paddle3d.models.detection.futr3d.futr3d_utils import normalize_bbox, nan_to_num
 from .samplers.pseudo_sampler import PseudoSampler
 from paddle3d.models.heads.dense_heads.target_assigner.hungarian_assigner import HungarianAssigner3D
@@ -237,8 +235,7 @@ class DeformableFUTR3DHead(nn.Layer):
         neg_inds = sampling_result.neg_inds
 
         # label targets
-        labels = paddle.full((num_bboxes,), self.num_classes, dtype='int32')
-        gt_labels = paddle.to_tensor(gt_labels, dtype='int32')
+        labels = paddle.full((num_bboxes,), self.num_classes, dtype='int64')
 
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
         label_weights = paddle.ones(shape=(num_bboxes,), dtype=gt_bboxes.dtype)

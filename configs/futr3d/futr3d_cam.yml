@@ -36,7 +36,7 @@ val_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
   ann_file: data/nuscenes/petr_nuscenes_annotation_val.pkl
-  mode: mini_val
+  mode: val
   class_names: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer',
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']
@@ -138,15 +138,15 @@ optimizer:
   weight_decay: 0.01
   grad_clip:
     type: ClipGradByGlobalNorm
-    clip_norm: 35
+    clip_norm: 10
 
 lr_scheduler:
   type: LinearWarmup
   learning_rate:
     type: MultiStepDecayByEpoch
-    learning_rate: 0.000025
+    learning_rate: 0.0001
     milestones: [21, 23]
     gamma: 0.1
   warmup_steps: 500
   start_lr: 0
-  end_lr: 0.000025
+  end_lr: 0.0001

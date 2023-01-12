@@ -49,8 +49,8 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # ref_point change to (B, num_cam, num_query, 4, 1)
     reference_points = paddle.reshape(reference_points, shape=(B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(-1)
     lidar2img = paddle.reshape(lidar2img, shape=(B, num_cam, 1, 4, 4)).tile([1, 1, num_query, 1, 1])
-    reference_points = (reference_points - reference_points.min()) / (reference_points.max() - reference_points.min())
-    lidar2img = (lidar2img - lidar2img.min()) / (lidar2img.max() - lidar2img.min())
+    # reference_points = (reference_points - reference_points.min()) / (reference_points.max() - reference_points.min())
+    # lidar2img = (lidar2img - lidar2img.min()) / (lidar2img.max() - lidar2img.min())
     # ref_point_cam change to (B, num_cam, num_query, 4)
     reference_points_cam = paddle.matmul(lidar2img, reference_points).squeeze(-1)
 
