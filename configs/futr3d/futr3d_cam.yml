@@ -23,16 +23,6 @@ train_dataset:
           'car', 'truck', 'construction_vehicle', 'bus', 'trailer',
           'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
       ]
-    - type: ResizeCropFlipImage
-      sample_aug_cfg:
-        resize_lim: [0.47, 0.625]
-        final_dim: [320, 800]
-        bot_pct_lim: [0.0, 0.0]
-        rot_lim: [0.0, 0.0]
-        H: 900
-        W: 1600
-        rand_flip: True
-      training: True
     - type: NormalizeMultiviewImage
       mean: [ 103.530, 116.280, 123.675 ]
       std: [1.0, 1.0, 1.0]
@@ -46,7 +36,7 @@ val_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
   ann_file: data/nuscenes/petr_nuscenes_annotation_val.pkl
-  mode: val
+  mode: mini_val
   class_names: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer',
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']
@@ -154,9 +144,9 @@ lr_scheduler:
   type: LinearWarmup
   learning_rate:
     type: MultiStepDecayByEpoch
-    learning_rate: 0.0001
+    learning_rate: 0.000025
     milestones: [21, 23]
     gamma: 0.1
   warmup_steps: 500
-  start_lr: 0.00006666666
-  end_lr: 0.0001
+  start_lr: 0
+  end_lr: 0.000025

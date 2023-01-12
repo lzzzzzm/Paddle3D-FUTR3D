@@ -1,0 +1,6 @@
+counter: 0
+keep_checkpoint_max: 5
+overwrite: true
+queue: []
+train_by_epoch: true
+vdl_file_name: vdlrecords.1673516629.log

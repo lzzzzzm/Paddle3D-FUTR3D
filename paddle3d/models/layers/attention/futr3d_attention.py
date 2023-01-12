@@ -9,14 +9,6 @@ from paddle3d.apis import manager
 import numpy as np
 from scipy.spatial.distance import cdist
 
-import pickle
-
-
-def save_variable(v, filename):
-    f = open(filename, 'wb')
-    pickle.dump(v, f)
-    f.close()
-    return filename
 
 def inverse_sigmoid(x, eps=1e-5):
     """Inverse function of sigmoid.
@@ -46,9 +38,11 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
     # lidar2img = reference_points.new_tensor(lidar2img)  # (B, N, 4, 4)
     reference_points_3d = reference_points.clone()
+    # reference_points = reference_points.numpy()
     reference_points[..., 0:1] = reference_points[..., 0:1] * (pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2] * (pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3] * (pc_range[5] - pc_range[2]) + pc_range[2]
+    # reference_points = paddle.to_tensor(reference_points)
     B, num_query = reference_points.shape[:2]
 
     # reference_points (B, num_queries, 4)
@@ -57,9 +51,9 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # ref_point change to (B, num_cam, num_query, 4, 1)
     reference_points = paddle.reshape(reference_points, shape=(B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(-1)
     lidar2img = paddle.reshape(lidar2img, shape=(B, num_cam, 1, 4, 4)).tile([1, 1, num_query, 1, 1])
+    reference_points = (reference_points - reference_points.min()) / (reference_points.max() - reference_points.min())
+    lidar2img = (lidar2img - lidar2img.min()) / (lidar2img.max() - lidar2img.min())
     # ref_point_cam change to (B, num_cam, num_query, 4)
-    # reference_points = (reference_points - reference_points.min()) / (reference_points.max() - reference_points.min())
-    # lidar2img = (lidar2img - lidar2img.min()) / (lidar2img.max() - lidar2img.min())
     reference_points_cam = paddle.matmul(lidar2img, reference_points).squeeze(-1)
 
     eps = 1e-5
@@ -68,6 +62,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
     # img_metas['img_shape']=[900, 1600]
+    img_shape = img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
@@ -82,6 +77,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # mask = nan_to_num(mask)
     sampled_feats = []
     num_points = 1
+    reference_points_cam = paddle.to_tensor(reference_points_cam)
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
         # feat_flip = paddle.flip(feat, [-1])
@@ -90,6 +86,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         reference_points_cam_lvl = paddle.reshape(reference_points_cam, shape=(B * N, int(num_query / 10), 10, 2))
         # sample_feat shape (B*N, C, num_query/10, 10)
         sampled_feat = F.grid_sample(feat, reference_points_cam_lvl, align_corners=False)
+        # sampled_feat = sampled_feat.clone()
         # sampled_feat shape (B, C, num_query, N, num_points)
         sampled_feat = paddle.reshape(sampled_feat, shape=(B, N, C, num_query, num_points))
         sampled_feat = paddle.transpose(sampled_feat, (0, 2, 3, 1, 4))
@@ -100,6 +97,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     sampled_feats = paddle.reshape(sampled_feats, shape=(B, C, num_query, num_cam, num_points, len(mlvl_feats)))
     # ref_point_3d (B, N, num_query, 3)  maks (B, N, num_query, 1)
     return reference_points_3d, sampled_feats, mask
+
 
 
 @manager.MODELS.add_component
@@ -239,7 +237,7 @@ class FUTR3DCrossAtten(nn.Layer):
 
             reference_points_3d, img_output, mask = feature_sampling(
                 img_feats, reference_points, self.pc_range, img_metas)
-            # save_variable(img_output.numpy(), 'paddle_img_output.txt')
+
             img_output = nan_to_num(img_output)
             img_attention_weights = F.sigmoid(img_attention_weights)
             img_attention_weights = self.weight_dropout(img_attention_weights)

@@ -8,14 +8,7 @@ from paddle3d.models.layers.param_init import (constant_init,
                                                xavier_uniform_init)
 
 from .transformer_layers import BaseTransformerLayer, TransformerLayerSequence
-import pickle
 
-
-def save_variable(v, filename):
-    f = open(filename, 'wb')
-    pickle.dump(v, f)
-    f.close()
-    return filename
 
 def inverse_sigmoid(x, eps=1e-5):
     """Inverse function of sigmoid.
