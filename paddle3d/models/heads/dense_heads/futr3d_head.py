@@ -246,9 +246,7 @@ class DeformableFUTR3DHead(nn.Layer):
         # bbox targets
         bbox_targets = paddle.zeros_like(bbox_pred)[..., :self.code_size - 1]
         bbox_weights = paddle.zeros_like(bbox_pred)
-        updates = paddle.ones(shape=bbox_weights.shape)
-        for i in range(len(pos_inds)):
-            bbox_weights[pos_inds[i]] = updates[i]
+        bbox_weights[pos_inds] = 1.0
         bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds)

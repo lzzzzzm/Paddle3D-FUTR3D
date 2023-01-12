@@ -38,11 +38,9 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = paddle.to_tensor(lidar2img, dtype='float32')
     # lidar2img = reference_points.new_tensor(lidar2img)  # (B, N, 4, 4)
     reference_points_3d = reference_points.clone()
-    # reference_points = reference_points.numpy()
     reference_points[..., 0:1] = reference_points[..., 0:1] * (pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2] * (pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3] * (pc_range[5] - pc_range[2]) + pc_range[2]
-    # reference_points = paddle.to_tensor(reference_points)
     B, num_query = reference_points.shape[:2]
 
     # reference_points (B, num_queries, 4)
