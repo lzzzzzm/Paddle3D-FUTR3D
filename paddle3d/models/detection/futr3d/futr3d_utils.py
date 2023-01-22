@@ -129,7 +129,14 @@ def bbox3d2result(bboxes, scores, labels, attrs=None):
 
 
 class GridMask(nn.Layer):
-    def __init__(self, use_h, use_w, rotate=1, offset=False, ratio=0.5, mode=0, prob=1.):
+    def __init__(self,
+                 use_h,
+                 use_w,
+                 rotate=1,
+                 offset=False,
+                 ratio=0.5,
+                 mode=0,
+                 prob=1.):
         super(GridMask, self).__init__()
         self.use_h = use_h
         self.use_w = use_w
@@ -141,16 +148,16 @@ class GridMask(nn.Layer):
         self.prob = prob
 
     def set_prob(self, epoch, max_epoch):
-        self.prob = self.st_prob * epoch / max_epoch  # + 1.#0.5
+        self.prob = self.st_prob * epoch / max_epoch  #+ 1.#0.5
 
     def forward(self, x):
         if np.random.rand() > self.prob or not self.training:
             return x
-        N, C, H, W = x.shape
-        x = paddle.reshape(x, (-1, H, W))
-        hh = int(1.5 * H)
-        ww = int(1.5 * W)
-        d = np.random.randint(2, H)
+        n, c, h, w = x.shape
+        x = x.reshape([-1, h, w])
+        hh = int(1.5 * h)
+        ww = int(1.5 * w)
+        d = np.random.randint(2, h)
         self.l = min(max(int(d * self.ratio + 0.5), 1), d - 1)
         mask = np.ones((hh, ww), np.float32)
         st_h = np.random.randint(d)
@@ -170,17 +177,18 @@ class GridMask(nn.Layer):
         mask = Image.fromarray(np.uint8(mask))
         mask = mask.rotate(r)
         mask = np.asarray(mask)
-        mask = mask[(hh - H) // 2:(hh - H) // 2 + H, (ww - W) // 2:(ww - W) // 2 + W]
-        mask = paddle.to_tensor(mask, dtype='float32')
+        mask = mask[(hh - h) // 2:(hh - h) // 2 +
+                    h, (ww - w) // 2:(ww - w) // 2 + w]
 
+        mask = paddle.to_tensor(mask).astype('float32')
         if self.mode == 1:
             mask = 1 - mask
         mask = mask.expand_as(x)
         if self.offset:
-            offset = paddle.to_tensor(2 * (np.random.rand(H, W) - 0.5), dtype='float32')
-
+            offset = paddle.to_tensor(
+                2 * (np.random.rand(h, w) - 0.5)).astype('float32')
             x = x * mask + offset * (1 - mask)
         else:
             x = x * mask
-        x = paddle.reshape(x, (N, C, H, W))
-        return x
+
+        return x.reshape([n, c, h, w])

@@ -12,7 +12,19 @@ from collections import OrderedDict
 import numpy as np
 
 __all__ = ["FUTR3D"]
+import pickle
 
+def save_variable(v,filename):
+    f=open(filename,'wb')
+    pickle.dump(v,f)
+    f.close()
+    return filename
+
+def load_variavle(filename):
+   f=open(filename,'rb')
+   r=pickle.load(f)
+   f.close()
+   return r
 
 @manager.MODELS.add_component
 class FUTR3D(BaseMultiViewModel):
@@ -43,16 +55,22 @@ class FUTR3D(BaseMultiViewModel):
             param.optimize_attr['learning_rate'] = bias_lr_factor
         self.head.init_weights()
 
+    def train(self):
+        super(FUTR3D,self).train()
+        self.backbone.train()
+
     def extract_img_feat(self, img, img_metas=None):
         """
             Extract features of images
         """
         B, N, C, H, W = img.shape
         img = paddle.reshape(img, (B * N, C, H, W))
-        # if self.use_grid_mask:
         img = self.grid_mask(img)
         # backbone
+        # save_variable(img.numpy(), 'img.txt')
         img_feats = self.backbone(img)
+        # for index, img_feat in enumerate(img_feats):
+        #     save_variable(img_feat.numpy(), 'img_backbone_feat[{}].txt'.format(index))
         # neck
         img_feats = self.neck(img_feats)
         # reshape img feats
@@ -185,7 +203,18 @@ class FUTR3D(BaseMultiViewModel):
             pass
         else:
             radar = None
+        # backbone_dict = self.backbone.state_dict()
+        # for key in backbone_dict.keys():
+        #     test1 = key
+        #     test2 = backbone_dict[key]
+        #     print(test1)
         pts_feats, img_feats, rad_feats = self.extract_feat(points=points, img=img, radar=radar)
+        # length = len(img_feats)
+        # img_feats = []
+        # for i in range(length):
+        #     save_feat = load_variavle('save_feat_{}.txt'.format(i))
+        #     save_feat = paddle.to_tensor(save_feat)
+        #     img_feats.append(save_feat)
         mdfs_loss = self.forward_mdfs_train(pts_feats=pts_feats,
                                             img_feats=img_feats,
                                             rad_feats=rad_feats,

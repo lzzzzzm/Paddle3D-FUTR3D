@@ -14,7 +14,14 @@ from paddle3d.apis import manager
 import numpy as np
 
 __all__ = ["DeformableFUTR3DHead"]
+import pickle
 
+
+def save_variable(v, filename):
+    f = open(filename, 'wb')
+    pickle.dump(v, f)
+    f.close()
+    return filename
 
 def inverse_sigmoid(x, eps=1e-5):
     """Inverse function of sigmoid.
@@ -331,9 +338,13 @@ class DeformableFUTR3DHead(nn.Layer):
         isnotnan = paddle.isfinite(normalized_bbox_targets).all(axis=-1)
         bbox_weights = bbox_weights * self.code_weights
 
+        select_index = paddle.arange(start=0, end=self.code_size)
+        loss_bbox_preds = paddle.index_select(bbox_preds[isnotnan], index=select_index, axis=1)
+        loss_normalized_bbox_targets = paddle.index_select(normalized_bbox_targets[isnotnan], index=select_index, axis=1)
+        loss_bbox_weights = paddle.index_select(bbox_weights[isnotnan], index=select_index, axis=1)
         loss_bbox = self.loss_bbox(
-            bbox_preds[isnotnan], normalized_bbox_targets[isnotnan],
-            bbox_weights[isnotnan]) / (num_total_pos + self.pd_eps)
+            loss_bbox_preds, loss_normalized_bbox_targets,
+            loss_bbox_weights) / (num_total_pos + self.pd_eps)
 
         loss_cls = nan_to_num(loss_cls)
         loss_bbox = nan_to_num(loss_bbox)

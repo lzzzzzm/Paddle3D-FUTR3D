@@ -96,11 +96,11 @@ class ConvBNLayer(nn.Layer):
                 data_format=data_format)
 
         self._batch_norm = nn.BatchNorm2D(out_channels, data_format=data_format)
-        # freeze norm parameters
-        norm_params = self._batch_norm.parameters()
-        if frozen_norm:
-            for param in norm_params:
-                param.stop_gradient = True
+        # # freeze norm parameters
+        # norm_params = self._batch_norm.parameters()
+        # if frozen_norm:
+        #     for param in norm_params:
+        #         param.stop_gradient = True
 
         if act:
             self._act = nn.ReLU()
@@ -293,6 +293,7 @@ class ResNet(nn.Layer):
                  frozen_stages=-1,
                  frozen_norm=False,
                  dcn_v2=False,
+                 norm_eval=False,
                  stage_with_dcn=(False, False, False, False),
                  preprocess=True,
                  data_format='NCHW'):
@@ -318,6 +319,7 @@ class ResNet(nn.Layer):
         self.style = style
         self.frozen_norm = frozen_norm
         self.frozen_stages = frozen_stages
+        self.norm_eval = norm_eval
         self.data_format = data_format
         self.conv1_logit = None  # for gscnn shape stream
         self.layers = layers
@@ -476,17 +478,20 @@ class ResNet(nn.Layer):
         self.init_weight()
 
 
-        # freeze parameter
-        if frozen_stages >= 0:
-            self._freeze_parameters(self.conv1)
-            for i in range(min(frozen_stages, 3)):
+    def _freeze_stages(self):
+        if self.frozen_stages >= 0:
+            for m in self.conv1.sublayers():
+                if isinstance(m, nn.BatchNorm2D):
+                    m.eval()
+                for param in m.parameters():
+                    param.stop_gradient = True
+
+            for i in range(min(self.frozen_stages+1, 4)):
                 for j in range(len(self.stage_list[i])):
-                    self._freeze_parameters(self.stage_list[i][j])
+                    self.stage_list[i][j].eval()
+                    for p in self.stage_list[i][j].parameters():
+                        p.stop_gradient = True
 
-
-    def _freeze_parameters(self, m):
-        for p in m.parameters():
-            p.stop_gradient = True
 
     def forward(self, inputs):
         if self.pre_process:
@@ -539,3 +544,11 @@ class ResNet(nn.Layer):
         for sublayer in self.sublayers():
             if isinstance(sublayer, nn.Conv2D):
                 reset_parameters(sublayer)
+
+    def train(self):
+        super(ResNet, self).train()
+        self._freeze_stages()
+        if self.norm_eval:
+            for m in self.sublayers():
+                if isinstance(m, nn.BatchNorm2D):
+                    m.eval()
