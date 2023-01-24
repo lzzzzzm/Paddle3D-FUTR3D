@@ -238,7 +238,7 @@ class FUTR3DCrossAtten(nn.Layer):
 
             img_output = nan_to_num(img_output)
             img_attention_weights = F.sigmoid(img_attention_weights)
-            img_attention_weights = self.weight_dropout(img_attention_weights)
+            img_attention_weights = self.weight_dropout(img_attention_weights)*mask
 
             img_output = img_output * img_attention_weights
             img_output = img_output.sum(-1).sum(-1).sum(-1)
