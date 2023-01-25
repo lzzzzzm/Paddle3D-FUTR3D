@@ -1,9 +1,0 @@
-counter: 1
-epochs: 5
-iters: 17585
-keep_checkpoint_max: 5
-overwrite: true
-queue:
-- epoch_5
-train_by_epoch: true
-vdl_file_name: vdlrecords.1674627764.log
