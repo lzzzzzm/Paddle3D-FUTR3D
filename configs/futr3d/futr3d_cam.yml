@@ -78,7 +78,7 @@ model:
     relu_before_extra_convs: True
   head:
     type: DeformableFUTR3DHead
-    num_query: 600
+    num_query: 900
     num_classes: 10
     in_channels: 256
     embed_dims: 256
@@ -140,15 +140,15 @@ optimizer:
   weight_decay: 0.01
   grad_clip:
     type: ClipGradByGlobalNorm
-    clip_norm: 10
+    clip_norm: 35
 
 lr_scheduler:
   type: LinearWarmup
   learning_rate:
-    type: MultiStepDecayByEpoch
-    learning_rate: 0.0001
-    milestones: [21, 23]
-    gamma: 0.1
-  warmup_steps: 1000
+    type: CosineAnnealingDecayByEpoch
+    learning_rate: 0.0002
+    T_max: 24
+    eta_min: 0.0000002
+  warmup_steps: 500
   start_lr: 0.00006666666
-  end_lr: 0.0001
+  end_lr: 0.0002
