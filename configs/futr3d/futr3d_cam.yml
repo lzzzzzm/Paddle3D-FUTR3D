@@ -146,9 +146,9 @@ lr_scheduler:
   type: LinearWarmup
   learning_rate:
     type: CosineAnnealingDecayByEpoch
-    learning_rate: 0.0002
+    learning_rate: 0.0001
     T_max: 24
     eta_min: 0.0000002
   warmup_steps: 500
   start_lr: 0.00006666666
-  end_lr: 0.0002
+  end_lr: 0.0001
