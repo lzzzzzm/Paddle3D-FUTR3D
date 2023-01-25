@@ -73,7 +73,7 @@ def parse_args():
         '--log_interval',
         dest='log_interval',
         help='Display logging information at every log_interval',
-        default=10,
+        default=100,
         type=int)
     parser.add_argument(
         '--num_workers',
@@ -105,7 +105,7 @@ def parse_args():
         'How many iters/epochs to save a model snapshot once during training.' \
         'Default None means 1000 if using iters or 5 for epochs',
         type=int,
-        default=None)
+        default=2)
     parser.add_argument(
         '--seed',
         dest='seed',
