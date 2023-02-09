@@ -13,6 +13,8 @@ train_dataset:
   transforms:
     - type: LoadMultiViewImageFromFiles
       to_float32: True
+    - type: PhotoMetricDistortionMultiViewImage
+#    - type: ResizeMultiImage
     - type: LoadAnnotations3D
       with_bbox_3d: True
       with_label_3d: True
@@ -36,13 +38,14 @@ val_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
   ann_file: data/nuscenes/nuscenes_infos_val.pkl
-  mode: val
+  mode: mini_val
   class_names: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer',
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']
   transforms:
     - type: LoadMultiViewImageFromFiles
       to_float32: True
+#    - type: ResizeMultiImage
     - type: NormalizeMultiviewImage
       mean: [103.530, 116.280, 123.675]
       std: [1.0, 1.0, 1.0]
@@ -56,6 +59,7 @@ model:
   use_LiDAR: False
   use_Radar: False
   use_Cam: True
+  use_grid_mask: True
   backbone:
     type: ResNet
     style: 'caffe'
@@ -102,7 +106,6 @@ model:
               embed_dims: 256
               num_heads: 8
               attn_drop: 0.1
-              drop_prob: 0.1
             - type: FUTR3DCrossAtten
               use_LiDAR: False
               use_Radar: False

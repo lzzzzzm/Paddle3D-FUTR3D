@@ -53,8 +53,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     num_cam = lidar2img.shape[1]
     reference_points = paddle.reshape(reference_points, shape=(B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(-1)
     lidar2img = paddle.reshape(lidar2img, shape=(B, num_cam, 1, 4, 4)).tile([1, 1, num_query, 1, 1])
-    # reference_points = (reference_points - reference_points.min()) / (reference_points.max() - reference_points.min())
-    # lidar2img = (lidar2img - lidar2img.min()) / (lidar2img.max() - lidar2img.min())
     # ref_point_cam change to (B, num_cam, num_query, 4)
     reference_points_cam = paddle.matmul(lidar2img, reference_points).squeeze(-1)
     eps = 1e-5
@@ -63,7 +61,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
     # img_metas['img_shape']=[900, 1600]
-    img_shape = img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
@@ -75,24 +72,18 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     mask = mask.reshape((B, num_cam, 1, num_query, 1, 1)).transpose((0, 2, 3, 1, 4, 5))
     # TODO
     # mask = nan_to_num(mask)
+    reference_points_cam = paddle.to_tensor(reference_points_cam)
     sampled_feats = []
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
         feat = feat.reshape((B*N, C, H, W))
-        # ref_point_cam shape change from (B, num_cam, num_query, 2) to (B*num_cam, num_query/10, 10, 2)
         reference_points_cam_lvl = reference_points_cam.reshape((B*N, num_query, 1, 2))
-        # reference_points_cam_lvl = paddle.reshape(reference_points_cam, shape=(B * N, int(num_query / 10), 10, 2))
-        # sample_feat shape (B*N, C, num_query/10, 10)
         sampled_feat = F.grid_sample(feat, reference_points_cam_lvl, align_corners=False)
-        # sampled_feat shape (B, C, num_query, N, num_points)
         sampled_feat = paddle.reshape(sampled_feat, shape=(B, N, C, num_query, 1)).transpose((0, 2, 3, 1, 4))
         sampled_feats.append(sampled_feat)
 
     sampled_feats = paddle.stack(sampled_feats, -1)
     sampled_feats = paddle.reshape(sampled_feats, shape=(B, C, num_query, num_cam, 1, len(mlvl_feats)))
-    # save_variable(reference_points_3d.numpy(), '../torch_paddle/paddle_var/reference_points_3d.txt')
-    # save_variable(sampled_feats.numpy(), '../torch_paddle/paddle_var/sampled_feats.txt')
-    # save_variable(mask.numpy(), '../torch_paddle/paddle_var/mask.txt')
     return reference_points_3d, sampled_feats, mask
 
 
@@ -209,7 +200,7 @@ class FUTR3DCrossAtten(nn.Layer):
                 **kwargs
                 ):
 
-        img_feats = kwargs['img_feats']
+        # img_feats = kwargs['img_feats']
         rad_feats = kwargs['rad_feats']
         reference_points = kwargs['reference_points']
         img_metas = kwargs['img_metas']

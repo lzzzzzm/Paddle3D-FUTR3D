@@ -199,10 +199,10 @@ class FUTR3D(BaseMultiViewModel):
             rad_feats=rad_feats,
             img_metas=img_metas
         )
-        out_all_cls_scores = outs['all_cls_scores']
-        out_all_bbox_preds = outs['all_bbox_preds']
-        save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/out_all_cls_scores.txt')
-        save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/out_all_bbox_preds.txt')
+        # out_all_cls_scores = outs['all_cls_scores']
+        # out_all_bbox_preds = outs['all_bbox_preds']
+        # save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/out_all_cls_scores.txt')
+        # save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/out_all_bbox_preds.txt')
         bbox_list = self.head.get_bboxes(outs, img_metas)
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)
