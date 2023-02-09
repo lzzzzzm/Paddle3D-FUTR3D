@@ -38,7 +38,7 @@ val_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
   ann_file: data/nuscenes/nuscenes_infos_val.pkl
-  mode: mini_val
+  mode: val
   class_names: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer',
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']
@@ -93,6 +93,7 @@ model:
     num_cls_fcs: 2
     num_reg_fcs: 2
     pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+    sync_cls_avg_factor: False
     transformer:
       type: FUTR3DTransformer
       decoder:
