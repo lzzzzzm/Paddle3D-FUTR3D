@@ -210,6 +210,7 @@ class DeformableFUTR3DHead(nn.Layer):
             outputs_coord = tmp
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
+
         outputs_classes = paddle.stack(outputs_classes)
         outputs_coords = paddle.stack(outputs_coords)
         outs = {
@@ -218,7 +219,6 @@ class DeformableFUTR3DHead(nn.Layer):
             'enc_cls_scores': None,
             'enc_bbox_preds': None,
         }
-
         return outs
 
     def multi_apply(self, func, *args, **kwargs):
@@ -251,6 +251,7 @@ class DeformableFUTR3DHead(nn.Layer):
         bbox_targets = paddle.zeros_like(bbox_pred)[..., :self.code_size - 1]
         bbox_weights = paddle.zeros_like(bbox_pred)
         bbox_weights[pos_inds] = 1.0
+
         bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds)

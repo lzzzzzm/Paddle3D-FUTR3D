@@ -32,13 +32,15 @@ class FUTR3D(BaseMultiViewModel):
                  use_LiDAR=False,
                  use_Cam=True,
                  use_Radar=False,
+                 use_grid_mask=True,
                  backbone=None,
                  radar_encoder=None,
                  neck=None,
                  head=None):
         super(FUTR3D, self).__init__()
-        # if self.use_grid_mask:
-        self.grid_mask = GridMask(use_h=True, use_w=True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
+        self.use_grid_mask = use_grid_mask
+        if self.use_grid_mask:
+            self.grid_mask = GridMask(use_h=True, use_w=True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         # self.use_grid_mask = use_grid_mask
         self.use_LiDAR = use_LiDAR
         self.use_Cam = use_Cam
@@ -63,32 +65,44 @@ class FUTR3D(BaseMultiViewModel):
         """
             Extract features of images
         """
-        B, N, C, H, W = img.shape
-        img = paddle.reshape(img, (B * N, C, H, W))
-        img = self.grid_mask(img)
-        # backbone
-        # save_variable(img.numpy(), 'img.txt')
-        img_feats = self.backbone(img)
-        # for index, img_feat in enumerate(img_feats):
-        #     save_variable(img_feat.numpy(), 'img_backbone_feat[{}].txt'.format(index))
-        # neck
-        img_feats = self.neck(img_feats)
-        # reshape img feats
+        B = img.shape[0]
+        if img is not None:
+            input_shape = img.shape[-2:]
+            for img_meta in img_metas:
+                img_meta.update(input_shape=input_shape)
+
+            if img.dim() == 5 and img.shape[0] == 1:
+                img = img.squeeze()
+            elif img.dim() == 5 and img.shape[0] > 1:
+                B, N, C, H, W = img.shape
+                img = img.reshape((B*N, C, H, W))
+            if self.use_grid_mask:
+                img = self.grid_mask(img)
+            img_feats = self.backbone(img)
+            if isinstance(img_feats, dict):
+                img_feats = list(img_feats.values())
+        else:
+            return None
+        # for index, feat in enumerate(img_feats):
+        #     save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_img_backbone_feats_{}.txt'.format(index))
+        if self.with_img_neck:
+            img_feats = self.neck(img_feats)
+            # for index, feat in enumerate(img_feats):
+            #     save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_img_neck_feats_{}.txt'.format(index))
         img_feats_reshaped = []
         for img_feat in img_feats:
             BN, C, H, W = img_feat.shape
-            img_feat = paddle.reshape(img_feat, (B, int(BN / B), C, H, W))
-            img_feats_reshaped.append(img_feat)
+            img_feats_reshaped.append(img_feat.reshape((B, int(BN / B), C, H, W)))
         return img_feats_reshaped
 
     def extract_pts_feat(self, points):
         # TODO
         pass
 
-    def extract_feat(self, points, img, radar):
+    def extract_feat(self, points, img, radar, img_metas):
 
         if self.use_Cam:
-            img_feats = self.extract_img_feat(img)
+            img_feats = self.extract_img_feat(img, img_metas)
         else:
             img_feats = None
         # TODO:
@@ -165,6 +179,10 @@ class FUTR3D(BaseMultiViewModel):
                          img_feats=img_feats,
                          rad_feats=rad_feats,
                          img_metas=img_metas)
+        # out_all_cls_scores = outs['all_cls_scores']
+        # out_all_bbox_preds = outs['all_bbox_preds']
+        # save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/b_out_all_cls_scores.txt')
+        # save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/b_out_all_bbox_preds.txt')
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs, gt_bboxes_ignore]
         losses = self.head.loss(*loss_inputs)
         loss = self._parse_loss(losses)
@@ -181,6 +199,10 @@ class FUTR3D(BaseMultiViewModel):
             rad_feats=rad_feats,
             img_metas=img_metas
         )
+        out_all_cls_scores = outs['all_cls_scores']
+        out_all_bbox_preds = outs['all_bbox_preds']
+        save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/out_all_cls_scores.txt')
+        save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/out_all_bbox_preds.txt')
         bbox_list = self.head.get_bboxes(outs, img_metas)
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)
@@ -203,18 +225,7 @@ class FUTR3D(BaseMultiViewModel):
             pass
         else:
             radar = None
-        # backbone_dict = self.backbone.state_dict()
-        # for key in backbone_dict.keys():
-        #     test1 = key
-        #     test2 = backbone_dict[key]
-        #     print(test1)
-        pts_feats, img_feats, rad_feats = self.extract_feat(points=points, img=img, radar=radar)
-        # length = len(img_feats)
-        # img_feats = []
-        # for i in range(length):
-        #     save_feat = load_variavle('save_feat_{}.txt'.format(i))
-        #     save_feat = paddle.to_tensor(save_feat)
-        #     img_feats.append(save_feat)
+        pts_feats, img_feats, rad_feats = self.extract_feat(points=points, img=img, radar=radar, img_metas=img_metas)
         mdfs_loss = self.forward_mdfs_train(pts_feats=pts_feats,
                                             img_feats=img_feats,
                                             rad_feats=rad_feats,
@@ -237,7 +248,7 @@ class FUTR3D(BaseMultiViewModel):
             pass
         else:
             radar = None
-        pts_feats, img_feats, rad_feats = self.extract_feat(points=points, img=img, radar=radar)
+        pts_feats, img_feats, rad_feats = self.extract_feat(points=points, img=img, radar=radar, img_metas=img_metas)
         bbox_results = self.forward_mdfs_test(pts_feats=pts_feats,
                                               img_feats=img_feats,
                                               rad_feats=rad_feats,
@@ -247,3 +258,8 @@ class FUTR3D(BaseMultiViewModel):
 
     def export_forward(self, samples):
         pass
+
+    @property
+    def with_img_neck(self):
+        """bool: Whether the detector has a neck in image branch."""
+        return hasattr(self, 'neck') and self.neck is not None

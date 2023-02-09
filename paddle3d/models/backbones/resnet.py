@@ -96,11 +96,6 @@ class ConvBNLayer(nn.Layer):
                 data_format=data_format)
 
         self._batch_norm = nn.BatchNorm2D(out_channels, data_format=data_format)
-        # # freeze norm parameters
-        # norm_params = self._batch_norm.parameters()
-        # if frozen_norm:
-        #     for param in norm_params:
-        #         param.stop_gradient = True
 
         if act:
             self._act = nn.ReLU()

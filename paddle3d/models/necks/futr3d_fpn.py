@@ -27,13 +27,12 @@ class ConvModule(nn.Layer):
                               padding=padding,
                               dilation=dilation,
                               groups=groups,
-                              weight_attr=nn.initializer.XavierUniform(),
-                              bias_attr=False)
-        self.bn = nn.BatchNorm2D(num_features=out_channels)
+                              weight_attr=nn.initializer.XavierUniform())
+        # self.bn = nn.BatchNorm2D(num_features=out_channels)
 
     def forward(self, inputs):
         out = self.conv(inputs)
-        out = self.bn(out)
+        # out = self.bn(out)
         return out
 
 @manager.NECKS.add_component
@@ -163,7 +162,6 @@ class FUTR3D_FPN(nn.Layer):
                     stride=2,
                     padding=1)
                 self.fpn_convs.append(extra_fpn_conv)
-
 
 
     def forward(self, inputs):

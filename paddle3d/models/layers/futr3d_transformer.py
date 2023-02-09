@@ -8,7 +8,13 @@ from paddle3d.models.layers.param_init import (constant_init,
                                                xavier_uniform_init)
 
 from .transformer_layers import BaseTransformerLayer, TransformerLayerSequence
+import pickle
 
+def save_variable(v,filename):
+    f=open(filename,'wb')
+    pickle.dump(v,f)
+    f.close()
+    return filename
 
 def inverse_sigmoid(x, eps=1e-5):
     """Inverse function of sigmoid.
@@ -69,7 +75,6 @@ class FUTR3DTransformer(nn.Layer):
         query_pos, query = paddle.split(query_embed, query_embed.shape[1] // self.embed_dims, axis=1)
         query_pos = query_pos.unsqueeze(0).tile([bs, 1, 1])
         query = query.unsqueeze(0).tile([bs, 1, 1])
-
         reference_points = self.reference_points(query_pos)
         if self.training and self.reference_points_aug:
             reference_points = reference_points + paddle.normal(reference_points)
@@ -83,6 +88,7 @@ class FUTR3DTransformer(nn.Layer):
         inter_states, inter_references = self.decoder(
             query=query,
             key=None,
+            value=img_feats,
             pts_feats=pts_feats,
             img_feats=img_feats,
             rad_feats=rad_feats,

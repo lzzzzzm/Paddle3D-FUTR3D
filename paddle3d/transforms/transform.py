@@ -34,9 +34,26 @@ __all__ = [
     "RandomHorizontalFlip", "RandomVerticalFlip", "GlobalRotate", "GlobalScale",
     "GlobalTranslate", "ShufflePoint", "SamplePoint", "SamplePointByVoxels",
     "FilterPointOutsideRange", "FilterBBoxOutsideRange", "HardVoxelize",
-    "RandomObjectPerturb", "ConvertBoxFormat", "ResizeShortestEdge",
+    "RandomObjectPerturb", "ConvertBoxFormat", "ResizeShortestEdge", 'ResizeMultiImage',
     "RandomContrast", "RandomBrightness", "RandomSaturation", "ToVisionBasedBox"
 ]
+
+@manager.TRANSFORMS.add_component
+class ResizeMultiImage(TransformABC):
+    """
+    Note:
+        If the inputs are pixel indices, they are flipped by `(W - 1 - x, H - 1 - y)`.
+        If the inputs are floating point coordinates, they are flipped by `(W - x, H - y)`.
+    """
+
+    def __init__(self):
+        pass
+
+    def __call__(self, sample: Sample):
+        sample['img'] = [cv2.resize(
+            img, (256, 256)) for img in sample['img']]
+        sample['img_shape'] = [img.shape for img in sample['img']]
+        return sample
 
 
 @manager.TRANSFORMS.add_component
@@ -641,6 +658,7 @@ def limit_period(val, offset=0.5, period=np.pi):
         paddle.Tensor: Value in the range of \
             [-offset * period, (1-offset) * period]
     """
+
     return val - np.floor(val / period + offset) * period
 
 
