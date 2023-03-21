@@ -17,9 +17,14 @@ class ConvModule(nn.Layer):
                  stride=1,
                  padding=0,
                  dilation=1,
-                 groups=1
+                 groups=1,
+                 norm_cfg=None,
+                 with_conv_bias=None,
+                 with_activation=False
                  ):
         super(ConvModule, self).__init__()
+        self.norm_cfg = norm_cfg
+        self.with_activation = with_activation
         self.conv = nn.Conv2D(in_channels=in_channels,
                               out_channels=out_channels,
                               kernel_size=kernel_size,
@@ -27,12 +32,22 @@ class ConvModule(nn.Layer):
                               padding=padding,
                               dilation=dilation,
                               groups=groups,
-                              weight_attr=nn.initializer.XavierUniform())
-        # self.bn = nn.BatchNorm2D(num_features=out_channels)
+                              weight_attr=nn.initializer.XavierUniform(),
+                              bias_attr=with_conv_bias)
+        if self.norm_cfg is not None:
+            self.bn = nn.BatchNorm2D(num_features=out_channels,
+                                     epsilon=float(norm_cfg['eps']),
+                                     momentum=float(1 - norm_cfg['momentum'])
+                                     )
+        if self.with_activation:
+            self.act = nn.ReLU()
 
     def forward(self, inputs):
         out = self.conv(inputs)
-        # out = self.bn(out)
+        if self.norm_cfg is not None:
+            out = self.bn(out)
+        if self.with_activation:
+            out = self.act(out)
         return out
 
 @manager.NECKS.add_component
@@ -99,6 +114,10 @@ class FUTR3D_FPN(nn.Layer):
                  num_outs,
                  start_level=0,
                  end_level=-1,
+                 upsample_cfg=dict(mode='nearest'),
+                 norm_cfg=dict(eps=1e-5, momentum=0.1),
+                 with_conv_bias=None,
+                 with_activation=False,
                  add_extra_convs=False,
                  relu_before_extra_convs=False,
                  no_norm_on_lateral=False):
@@ -108,6 +127,7 @@ class FUTR3D_FPN(nn.Layer):
         self.out_channels = out_channels
         self.num_ins = len(in_channels)
         self.num_outs = num_outs
+        self.upsample_cfg = upsample_cfg
         self.relu_before_extra_convs = relu_before_extra_convs
         self.no_norm_on_lateral = no_norm_on_lateral
         self.fp16_enabled = False
@@ -137,12 +157,18 @@ class FUTR3D_FPN(nn.Layer):
             l_conv = ConvModule(
                 in_channels=in_channels[i],
                 out_channels=out_channels,
-                kernel_size=1)
+                kernel_size=1,
+                norm_cfg=norm_cfg,
+                with_conv_bias=with_conv_bias,
+                with_activation=with_activation)
             fpn_conv = ConvModule(
                 in_channels=out_channels,
                 out_channels=out_channels,
                 kernel_size=3,
-                padding=1)
+                padding=1,
+                norm_cfg=norm_cfg,
+                with_conv_bias=with_conv_bias,
+                with_activation=with_activation)
 
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
@@ -160,7 +186,10 @@ class FUTR3D_FPN(nn.Layer):
                     out_channels=out_channels,
                     kernel_size=3,
                     stride=2,
-                    padding=1)
+                    padding=1,
+                    norm_cfg=norm_cfg,
+                    with_conv_bias=with_conv_bias,
+                    with_activation=with_activation)
                 self.fpn_convs.append(extra_fpn_conv)
 
 
@@ -173,15 +202,19 @@ class FUTR3D_FPN(nn.Layer):
             lateral_conv(inputs[i + self.start_level])
             for i, lateral_conv in enumerate(self.lateral_convs)
         ]
-
+        laterals = [x.clone() for x in laterals]
         # build top-down path
         used_backbone_levels = len(laterals)
         for i in range(used_backbone_levels - 1, 0, -1):
             # In some cases, fixing `scale factor` (e.g. 2) is preferred, but
             #  it cannot co-exist with `size` in `F.interpolate`.
-            prev_shape = laterals[i - 1].shape[2:]
-            laterals[i - 1] = laterals[i - 1] + F.interpolate(
-                laterals[i], size=prev_shape)
+            if 'scale_factor' in self.upsample_cfg:
+                laterals[i - 1] += F.interpolate(laterals[i],
+                                                 **self.upsample_cfg)
+            else:
+                prev_shape = laterals[i - 1].shape[2:]
+                laterals[i - 1] = laterals[i - 1] + F.interpolate(
+                    laterals[i], size=prev_shape, **self.upsample_cfg)
 
         # build outputs
         # part 1: from original levels
@@ -212,3 +245,6 @@ class FUTR3D_FPN(nn.Layer):
                     else:
                         outs.append(self.fpn_convs[i](outs[-1]))
         return tuple(outs)
+
+
+

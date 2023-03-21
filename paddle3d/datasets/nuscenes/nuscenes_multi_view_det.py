@@ -53,6 +53,7 @@ class NuscenesMVDataset(NuscenesDetDataset):
                  dataset_root: str,
                  ann_file: str = None,
                  mode: str = "train",
+                 use_lidar = False,
                  transforms: Union[TransformABC, List[TransformABC]] = None,
                  max_sweeps: int = 10,
                  class_names: Union[list, tuple] = None,
@@ -83,7 +84,7 @@ class NuscenesMVDataset(NuscenesDetDataset):
 
         self.modality = dict(
             use_camera=True,
-            use_lidar=False,
+            use_lidar=use_lidar,
             use_radar=False,
             use_map=False,
             use_external=True,
@@ -178,8 +179,10 @@ class NuscenesMVDataset(NuscenesDetDataset):
                 - ann_info (dict): Annotation info.
         """
         info = self.data_infos[index]
-
-        sample = Sample(path=None, modality="multiview")
+        if self.modality['use_lidar']:
+            sample = Sample(path=None, modality="multimodal")
+        else:
+            sample = Sample(path=None, modality="multiview")
         sample.sample_idx = info['token']
         sample.meta.id = info['token']
         sample.pts_filename = info['lidar_path']
@@ -222,7 +225,7 @@ class NuscenesMVDataset(NuscenesDetDataset):
                      extrinsics=extrinsics))
 
         # if not self.is_test_mode:
-        if self.mode == 'train':
+        if self.mode == 'train' or self.mode == 'mini_train':
             annos = self.get_ann_info(index)
             sample.ann_info = annos
         return sample

@@ -34,8 +34,8 @@ from paddle3d.utils import box_utils
 __all__ = [
     "RandomHorizontalFlip", "RandomVerticalFlip", "GlobalRotate", "GlobalScale",
     "GlobalTranslate", "ShufflePoint", "SamplePoint", "SamplePointByVoxels",
-    "FilterPointOutsideRange", "FilterBBoxOutsideRange", "HardVoxelize",
-    "RandomObjectPerturb", "ConvertBoxFormat", "ResizeShortestEdge", 'ResizeMultiImage', 'PhotoMetricDistortionMultiViewImage',
+    "FilterPointOutsideRange", "FilterBBoxOutsideRange", "HardVoxelize", 'PointsRangeFilter',
+    "RandomObjectPerturb", "ConvertBoxFormat", "ResizeShortestEdge", 'ResizeMultiImage', 'PhotoMetricDistortionMultiViewImage', 'fixed_PhotoMetricDistortionMultiViewImage',
     "RandomContrast", "RandomBrightness", "RandomSaturation", "ToVisionBasedBox"
 ]
 
@@ -53,6 +53,7 @@ class ResizeMultiImage(TransformABC):
     def __call__(self, sample: Sample):
         sample['img'] = [cv2.resize(
             img, (256, 256)) for img in sample['img']]
+
         sample['img_shape'] = [img.shape for img in sample['img']]
         return sample
 
@@ -375,14 +376,19 @@ class HardVoxelize(TransformABC):
             self.voxel_size).astype('int32')
 
     def __call__(self, sample: Sample):
-        if sample.modality != "lidar":
+        if sample.modality != "lidar" and sample.modality != "multiview":
             raise ValueError("Voxelize only supports lidar data!")
 
+        if sample.modality == 'lidar':
+            points = sample.data
+        else:
+            points = sample.points
+
+        num_points, num_point_dim = points.shape[0:2]
         # Voxelize
-        num_points, num_point_dim = sample.data.shape[0:2]
         voxels = np.zeros(
             (self.max_voxel_num, self.max_points_in_voxel, num_point_dim),
-            dtype=sample.data.dtype)
+            dtype=points.dtype)
         coords = np.zeros((self.max_voxel_num, 3), dtype=np.int32)
         num_points_per_voxel = np.zeros((self.max_voxel_num, ), dtype=np.int32)
         grid_size_z, grid_size_y, grid_size_x = self.grid_size[::-1]
@@ -391,7 +397,7 @@ class HardVoxelize(TransformABC):
                                         dtype=np.int32)
 
         num_voxels = points_to_voxel(
-            sample.data, self.voxel_size, self.point_cloud_range,
+            points, self.voxel_size, self.point_cloud_range,
             self.grid_size, voxels, coords, num_points_per_voxel,
             grid_idx_to_voxel_idx, self.max_points_in_voxel, self.max_voxel_num)
 
@@ -723,6 +729,59 @@ class SampleRangeFilter(object):
             gt_bboxes_3d, offset=0.5, period=2 * np.pi)
         sample['gt_bboxes_3d'] = gt_bboxes_3d
         sample['gt_labels_3d'] = gt_labels_3d
+
+        return sample
+
+@manager.TRANSFORMS.add_component
+class PointsRangeFilter(object):
+    """Filter points by the range.
+
+    Args:
+        point_cloud_range (list[float]): Point cloud range.
+    """
+
+    def __init__(self, point_cloud_range):
+        self.pcd_range = np.array(point_cloud_range, dtype=np.float32)
+
+    def in_range_3d(self, point_range, points):
+        """Check whether the points are in the given range.
+
+        Args:
+            point_range (list | torch.Tensor): The range of point
+                (x_min, y_min, z_min, x_max, y_max, z_max)
+
+        Note:
+            In the original implementation of SECOND, checking whether
+            a box in the range checks whether the points are in a convex
+            polygon, we try to reduce the burden for simpler cases.
+
+        Returns:
+            torch.Tensor: A binary vector indicating whether each point is
+                inside the reference range.
+        """
+        in_range_flags = ((points[:, 0] > point_range[0])
+                          & (points[:, 1] > point_range[1])
+                          & (points[:, 2] > point_range[2])
+                          & (points[:, 0] < point_range[3])
+                          & (points[:, 1] < point_range[4])
+                          & (points[:, 2] < point_range[5]))
+        return in_range_flags
+
+    def __call__(self, sample):
+        """Call function to filter points by the range.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after filtering, 'points', 'pts_instance_mask'
+                and 'pts_semantic_mask' keys are updated in the result dict.
+        """
+        points = sample['points']
+
+        points_mask = self.in_range_3d(self.pcd_range, points)
+        clean_points = points[points_mask]
+        sample['points'] = clean_points
 
         return sample
 
@@ -1159,6 +1218,7 @@ class NormalizeMultiviewImage(object):
             F.normalize_use_cv2(img, self.mean, self.std, self.to_rgb)
             for img in sample['img']
         ]
+        # sample['img'] = np.array(sample['img'])
         sample['img_norm_cfg'] = dict(
             mean=self.mean, std=self.std, to_rgb=self.to_rgb)
 
@@ -1258,7 +1318,7 @@ class PadMultiViewImage(object):
                 for img in sample['img']
             ]
         sample['img_shape'] = [img.shape for img in sample['img']]
-        sample['img'] = padded_img
+        # sample['img'] = np.array(padded_img)
         sample['pad_shape'] = [img.shape for img in padded_img]
         sample['pad_fixed_size'] = self.size
         sample['pad_size_divisor'] = self.size_divisor
@@ -1337,6 +1397,88 @@ class PhotoMetricDistortionMultiViewImage(object):
             # randomly swap channels
             if random.randint(2):
                 img = img[..., random.permutation(3)]
+            new_imgs.append(img)
+        sample['img'] = new_imgs
+        return sample
+
+@manager.TRANSFORMS.add_component
+class fixed_PhotoMetricDistortionMultiViewImage(object):
+    """Apply photometric distortion to image sequentially, every transformation
+    is applied with a probability of 0.5. The position of random contrast is in
+    second or second to last.
+    1. random brightness
+    2. random contrast (mode 0)
+    3. convert color from BGR to HSV
+    4. random saturation
+    5. random hue
+    6. convert color from HSV to BGR
+    7. random contrast (mode 1)
+    8. randomly swap channels
+    Args:
+        brightness_delta (int): delta of brightness.
+        contrast_range (tuple): range of contrast.
+        saturation_range (tuple): range of saturation.
+        hue_delta (int): delta of hue.
+    """
+
+    def __init__(self,
+                 brightness_delta=32,
+                 contrast_range=(0.5, 1.5),
+                 saturation_range=(0.5, 1.5),
+                 hue_delta=18):
+        self.brightness_delta = brightness_delta
+        self.contrast_lower, self.contrast_upper = contrast_range
+        self.saturation_lower, self.saturation_upper = saturation_range
+        self.hue_delta = hue_delta
+
+    def __call__(self, sample):
+        imgs = sample['img']
+        new_imgs = []
+        for img in imgs:
+            assert img.dtype == np.float32, \
+                'PhotoMetricDistortion needs the input image of dtype np.float32,'\
+                ' please set "to_float32=True" in "LoadImageFromFile" pipeline'
+            # if random.randint(2):
+            # delta = random.uniform(-self.brightness_delta,
+            #                     self.brightness_delta)
+            delta = 16
+            img += delta
+            # mode == 0 --> do random contrast first
+            # mode == 1 --> do random contrast last
+            # mode = random.randint(2)
+            mode = 1
+            if mode == 1:
+                # if random.randint(2):
+                # alpha = random.uniform(self.contrast_lower,
+                #                        self.contrast_upper)
+                alpha = 0.5
+                img *= alpha
+            # convert color from BGR to HSV
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            # random saturation
+            # if random.randint(2):
+            # img[..., 1] *= random.uniform(self.saturation_lower,
+            #                             self.saturation_upper)
+            img[..., 1] *= 0.5
+
+            # random hue
+            # if random.randint(2):
+            # img[..., 0] += random.uniform(-self.hue_delta, self.hue_delta)
+            img[..., 0] += 9
+            img[..., 0][img[..., 0] > 360] -= 360
+            img[..., 0][img[..., 0] < 0] += 360
+
+            # convert color from HSV to BGR
+            img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
+            # random contrast
+            if mode == 0:
+                if random.randint(2):
+                    alpha = random.uniform(self.contrast_lower,
+                                        self.contrast_upper)
+                    img *= alpha
+            # randomly swap channels
+            # if random.randint(2):
+            img = img[..., [2, 0, 1]]
             new_imgs.append(img)
         sample['img'] = new_imgs
         return sample

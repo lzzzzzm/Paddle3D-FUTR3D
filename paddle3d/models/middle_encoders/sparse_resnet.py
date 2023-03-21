@@ -59,10 +59,11 @@ class SparseBasicBlock(paddle.nn.Layer):
             out_channels,
             stride=1,
             downsample=None,
+            bias_attr=True
     ):
         super(SparseBasicBlock, self).__init__()
 
-        bias_attr = True
+        bias_attr = bias_attr
         self.conv1 = conv3x3(
             in_channels, out_channels, stride, bias_attr=bias_attr)
         self.bn1 = nn.BatchNorm(out_channels, epsilon=1e-3, momentum=0.01)

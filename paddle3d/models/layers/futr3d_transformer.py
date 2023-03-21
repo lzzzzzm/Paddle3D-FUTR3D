@@ -137,6 +137,10 @@ class DetrTransformerDecoderLayer(BaseTransformerLayer):
             attn_masks=None,
             query_key_padding_mask=None,
             key_padding_mask=None,
+            reference_points=None,
+            img_feats=None,
+            pts_feats=None,
+            rad_feats=None,
             **kwargs
     ):
         """Forward function for `TransformerCoder`.
@@ -152,6 +156,10 @@ class DetrTransformerDecoderLayer(BaseTransformerLayer):
             attn_masks=attn_masks,
             query_key_padding_mask=query_key_padding_mask,
             key_padding_mask=key_padding_mask,
+            reference_points=reference_points,
+            img_feats=img_feats,
+            pts_feats=pts_feats,
+            rad_feats=rad_feats,
             **kwargs
         )
 
@@ -166,6 +174,10 @@ class DetrTransformerDecoderLayer(BaseTransformerLayer):
                 attn_masks=None,
                 query_key_padding_mask=None,
                 key_padding_mask=None,
+                reference_points=None,
+                img_feats=None,
+                pts_feats=None,
+                rad_feats=None,
                 **kwargs):
         """Forward function for `TransformerCoder`.
         Returns:
@@ -183,6 +195,10 @@ class DetrTransformerDecoderLayer(BaseTransformerLayer):
                 attn_masks,
                 query_key_padding_mask,
                 key_padding_mask,
+                reference_points,
+                img_feats,
+                pts_feats,
+                rad_feats,
                 **kwargs
             )
         else:
@@ -195,6 +211,10 @@ class DetrTransformerDecoderLayer(BaseTransformerLayer):
                 attn_masks=attn_masks,
                 query_key_padding_mask=query_key_padding_mask,
                 key_padding_mask=key_padding_mask,
+                reference_points=reference_points,
+                img_feats=img_feats,
+                pts_feats=pts_feats,
+                rad_feats=rad_feats,
                 **kwargs)
         return x
 

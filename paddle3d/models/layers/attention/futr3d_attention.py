@@ -40,7 +40,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     lidar2img = []
     for img_meta in img_metas:
         lidar2img.append(img_meta['lidar2img'])
-    lidar2img = np.asarray(lidar2img)
+    # lidar2img = np.asarray(lidar2img)
     lidar2img = paddle.to_tensor(lidar2img, dtype=reference_points.dtype)
     reference_points = reference_points.clone()
     reference_points_3d = reference_points.clone()
@@ -51,9 +51,8 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points = paddle.concat((reference_points, paddle.ones_like(reference_points[..., :1])), -1)
     B, num_query = reference_points.shape[:2]
     num_cam = lidar2img.shape[1]
-    reference_points = paddle.reshape(reference_points, shape=(B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(-1)
-    lidar2img = paddle.reshape(lidar2img, shape=(B, num_cam, 1, 4, 4)).tile([1, 1, num_query, 1, 1])
-    # ref_point_cam change to (B, num_cam, num_query, 4)
+    reference_points = reference_points.reshape((B, 1, num_query, 4)).tile([1, num_cam, 1, 1]).unsqueeze(-1)
+    lidar2img = lidar2img.reshape((B, num_cam, 1, 4, 4)).tile(([1, 1, num_query, 1, 1]))
     reference_points_cam = paddle.matmul(lidar2img, reference_points).squeeze(-1)
     eps = 1e-5
     mask = (reference_points_cam[..., 2:3] > eps)
@@ -61,14 +60,13 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
     # img_metas['img_shape']=[900, 1600]
-    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
+    reference_points_cam[..., 0] =  reference_points_cam[..., 0] / img_metas[0]['img_shape'][0][1]
+    reference_points_cam[..., 1] =  reference_points_cam[..., 1] / img_metas[0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
     mask = (mask & (reference_points_cam[..., 0:1] > -1.0)
                  & (reference_points_cam[..., 0:1] < 1.0)
                  & (reference_points_cam[..., 1:2] > -1.0)
                  & (reference_points_cam[..., 1:2] < 1.0))
-    # mask shape (B, 1, num_query, num_cam, 1, 1)
     mask = mask.reshape((B, num_cam, 1, num_query, 1, 1)).transpose((0, 2, 3, 1, 4, 5))
     # TODO
     # mask = nan_to_num(mask)
@@ -77,15 +75,47 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
         feat = feat.reshape((B*N, C, H, W))
-        reference_points_cam_lvl = reference_points_cam.reshape((B*N, num_query, 1, 2))
+        reference_points_cam_lvl = reference_points_cam.reshape((B*N, int(num_query/10), 10, 2))
         sampled_feat = F.grid_sample(feat, reference_points_cam_lvl, align_corners=False)
-        sampled_feat = paddle.reshape(sampled_feat, shape=(B, N, C, num_query, 1)).transpose((0, 2, 3, 1, 4))
+        sampled_feat = sampled_feat.reshape((B, N, C, num_query, 1)).transpose((0, 2, 3, 1, 4))
         sampled_feats.append(sampled_feat)
-
     sampled_feats = paddle.stack(sampled_feats, -1)
     sampled_feats = paddle.reshape(sampled_feats, shape=(B, C, num_query, num_cam, 1, len(mlvl_feats)))
     return reference_points_3d, sampled_feats, mask
 
+def feature_sampling_3D(points_feats, reference_points, pc_range):
+
+    # for index, feat in enumerate(points_feats):
+    #     save_variable(feat.numpy(), 'points_feats_{}.txt'.format(index))
+    # save_variable(reference_points.numpy(), 'reference_points.txt')
+    # save_variable(pc_range, 'pc_range.txt')
+    reference_points = reference_points.clone()
+    reference_points_rel = reference_points[..., 0:2]
+
+    reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+    reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+    reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
+    # reference_points (B, num_queries, 3)
+    B, num_query = reference_points.shape[:2]
+
+    reference_points_rel[..., 0] = reference_points[..., 0] / pc_range[3]
+    reference_points_rel[..., 1] = reference_points[..., 1] / pc_range[4]
+    # reference_points_rel = paddle.to_tensor(reference_points_rel, dtype=reference_points.dtype)
+    # mlvl_feats = []
+    # for i in range(len(points_feats)):
+    #     mlvl_feats.append(paddle.to_tensor(points_feats[i], dtype=points_feats[i].dtype))
+    sampled_feats = []
+    num_points = 1
+    for lvl, feat in enumerate(points_feats):
+        B, N, C, H, W = feat.shape
+        feat = feat.reshape((B*N, C, H, W))
+        reference_points_rel_lvl = reference_points_rel.reshape((B*N, int(num_query/10), 10, 2))
+        sampled_feat = F.grid_sample(feat, reference_points_rel_lvl, align_corners=False)
+        sampled_feat = sampled_feat.reshape((B, N, C, num_query, num_points)).transpose((0, 2, 3, 1, 4))
+        sampled_feats.append(sampled_feat)
+    sampled_feats = paddle.stack(sampled_feats, -1)
+    sampled_feats = sampled_feats.reshape((B, C, num_query, 1,  num_points, len(points_feats)))
+    return sampled_feats
 
 
 @manager.MODELS.add_component
@@ -136,7 +166,7 @@ class FUTR3DCrossAtten(nn.Layer):
         if self.use_Cam:
             self.attention_weights = nn.Linear(embed_dims,
                                                num_cams * num_levels * num_points)
-            self.img_output_proj = nn.Linear(embed_dims, embed_dims)
+            self.output_proj = nn.Linear(embed_dims, embed_dims)
             self.fused_embed += embed_dims
 
         if self.use_LiDAR:
@@ -167,16 +197,18 @@ class FUTR3DCrossAtten(nn.Layer):
             nn.ReLU(),
             nn.Linear(self.embed_dims, self.embed_dims),
             nn.LayerNorm(self.embed_dims),
-            nn.ReLU(),
         )
+        if self.use_Cam and self.use_LiDAR==False and self.use_Radar==False:
+            self.pos_encoder.add_sublayer('relu',nn.ReLU())
+
         self.init_weights()
 
     def init_weights(self):
         if self.use_Cam:
             constant_init(self.attention_weights.weight, value=0)
             constant_init(self.attention_weights.bias, value=0)
-            constant_init(self.img_output_proj.bias, value=0)
-            xavier_uniform_init(self.img_output_proj.weight)
+            constant_init(self.output_proj.bias, value=0)
+            xavier_uniform_init(self.output_proj.weight)
         if self.use_LiDAR:
             constant_init(self.pts_attention_weights.weight, value=0)
             constant_init(self.pts_attention_weights.bias, value=0)
@@ -197,13 +229,12 @@ class FUTR3DCrossAtten(nn.Layer):
                 key_pos=None,
                 attn_mask=None,
                 key_padding_mask=None,
+                reference_points=None,
+                img_feats=None,
+                pts_feats=None,
+                rad_feats=None,
                 **kwargs
                 ):
-
-        # img_feats = kwargs['img_feats']
-        rad_feats = kwargs['rad_feats']
-        reference_points = kwargs['reference_points']
-        img_metas = kwargs['img_metas']
 
         if key is None:
             key = query
@@ -224,7 +255,7 @@ class FUTR3DCrossAtten(nn.Layer):
             ))
 
             reference_points_3d, img_output, mask = feature_sampling(
-                value, reference_points, self.pc_range, img_metas)
+                value, reference_points, self.pc_range, kwargs['img_metas'])
 
             img_output = nan_to_num(img_output)
             img_attention_weights = F.sigmoid(img_attention_weights)
@@ -233,7 +264,22 @@ class FUTR3DCrossAtten(nn.Layer):
             img_output = img_output * img_attention_weights
             img_output = img_output.sum(-1).sum(-1).sum(-1)
             img_output = paddle.transpose(img_output, (2, 0, 1))
-            img_output = self.img_output_proj(img_output)
+            img_output = self.output_proj(img_output)
+
+        if self.use_LiDAR:
+            pts_attention_weights = self.pts_attention_weights(query).reshape(
+                (bs, 1, num_query, 1, self.num_points, self.num_levels)
+            )
+            pts_output = feature_sampling_3D(
+                pts_feats, reference_points, self.pc_range
+            )
+            # pts_output.backward()
+            pts_output = nan_to_num(pts_output)
+            pts_attention_weights = self.weight_dropout(F.sigmoid(pts_attention_weights))
+            pts_output = pts_output * pts_attention_weights
+            pts_output = pts_output.sum(-1).sum(-1).sum(-1)
+            pts_output = pts_output.transpose((2, 0, 1))
+            pts_output = self.pts_output_proj(pts_output)
 
         if self.use_Radar:
             radar_feats, radar_mask = rad_feats[:, :, :-1], rad_feats[:, :, -1]
@@ -278,11 +324,16 @@ class FUTR3DCrossAtten(nn.Layer):
 
             radar_out = self.radar_output_proj(radar_out)
 
-        if self.use_Cam and self.use_Radar:
+        if self.use_Cam and self.use_LiDAR:
+            output = paddle.concat((img_output, pts_output), axis=2).transpose((1, 0, 2))
+            output = self.modality_fusion_layer(output).transpose((1, 0, 2))
+        elif self.use_Cam and self.use_Radar:
             output = paddle.concat((img_output, radar_out), axis=2).transpose((1, 0, 2))
             output = self.modality_fusion_layer(output).transpose((1, 0, 2))
         elif self.use_Cam:
             output = img_output
+        elif self.use_LiDAR:
+            output = pts_output
 
         # reference_points_3d = reference_points.clone()
         # (num_query, bs, embed_dims)

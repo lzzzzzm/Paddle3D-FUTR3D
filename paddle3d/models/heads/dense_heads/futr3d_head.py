@@ -100,9 +100,15 @@ class DeformableFUTR3DHead(nn.Layer):
         self.cls_out_channels = num_classes
         self.bg_cls_weight = bg_cls_weight
         if code_weights is not None:
-            self.code_weights = paddle.to_tensor(code_weights)
+            default_code_weights = code_weights
+            # self.code_weights = paddle.to_tensor(code_weights)
         else:
-            self.code_weights = paddle.to_tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2])
+            default_code_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
+            # self.code_weights = paddle.to_tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2])
+        self.code_weights = paddle.create_parameter(shape=(10, ), dtype='float32', name='code_weights')
+        self.code_weights.stop_gradient = True
+        for i in range(len(default_code_weights)):
+            self.code_weights[i] = default_code_weights[i]
         # model layers
         self.bbox_coder = bbox_coder
         self.transformer = transformer
@@ -248,7 +254,7 @@ class DeformableFUTR3DHead(nn.Layer):
         label_weights = paddle.ones(shape=(num_bboxes,), dtype=gt_bboxes.dtype)
 
         # bbox targets
-        bbox_targets = paddle.zeros_like(bbox_pred)[..., :self.code_size - 1]
+        bbox_targets = paddle.zeros_like(bbox_pred)[..., :9]
         bbox_weights = paddle.zeros_like(bbox_pred)
         bbox_weights[pos_inds] = 1.0
 
