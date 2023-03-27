@@ -16,4 +16,3 @@ from . import pillar_scatter
 from .pillar_scatter import PointPillarsScatter
 from .sparse_resnet import SparseResNet3D
 from .sparsenet import SparseNet3D
-from .sparse_encoder import SparseEncoder

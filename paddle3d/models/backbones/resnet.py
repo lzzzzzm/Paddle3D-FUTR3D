@@ -205,7 +205,6 @@ class BottleneckBlock(nn.Layer):
             short = inputs
         else:
             short = self.short(inputs)
-
         y = paddle.add(short, conv2)
         y = self.relu(y)
         return y
@@ -546,4 +545,5 @@ class ResNet(nn.Layer):
         if self.norm_eval:
             for m in self.sublayers():
                 if isinstance(m, nn.BatchNorm2D):
+                    m.stop_gradient = True
                     m.eval()

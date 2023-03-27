@@ -93,24 +93,25 @@ class FUTR3D(BaseMultiViewModel):
                 img = img.reshape((B*N, C, H, W))
             if self.use_grid_mask:
                 img = self.grid_mask(img)
+            img.stop_gradient = False
             img_feats = self.backbone(img)
             if isinstance(img_feats, dict):
                 img_feats = list(img_feats.values())
         else:
             return None
-        for index, feat in enumerate(img_feats):
-            if self.training:
-                save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_img_backbone_feats_{}.txt'.format(index))
-            else:
-                save_variable(feat.numpy(), '../torch_paddle/paddle_var/img_backbone_feats_{}.txt'.format(index))
-        if self.with_img_neck:
 
+        # for index, feat in enumerate(img_feats):
+        #     if self.training:
+        #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_img_backbone_feats_{}.txt'.format(index))
+        #     else:
+        #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/img_backbone_feats_{}.txt'.format(index))
+        if self.with_img_neck:
             img_feats = self.neck(img_feats)
-            for index, feat in enumerate(img_feats):
-                if self.training:
-                    save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_img_neck_feats_{}.txt'.format(index))
-                else:
-                    save_variable(feat.numpy(), '../torch_paddle/paddle_var/img_neck_feats_{}.txt'.format(index))
+            # for index, feat in enumerate(img_feats):
+            #     if self.training:
+            #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_img_neck_feats_{}.txt'.format(index))
+            #     else:
+            #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/img_neck_feats_{}.txt'.format(index))
         img_feats_reshaped = []
         for img_feat in img_feats:
             BN, C, H, W = img_feat.shape
@@ -135,30 +136,39 @@ class FUTR3D(BaseMultiViewModel):
         voxels = voxels.squeeze()
         num_points = num_points.squeeze()
         coors = self.voxelize_process(coordinates)
-        save_variable(voxels.numpy(), '../torch_paddle/paddle_var/voxels.txt')
-        save_variable(coors.numpy(), '../torch_paddle/paddle_var/coors.txt')
-        save_variable(num_points.numpy(), '../torch_paddle/paddle_var/num_points.txt')
+        # if not self.training:
+        #     save_variable(points.numpy(), '../torch_paddle/paddle_var/points.txt')
+        #     save_variable(voxels.numpy(), '../torch_paddle/paddle_var/voxels.txt')
+        #     save_variable(coors.numpy(), '../torch_paddle/paddle_var/coors.txt')
+        #     save_variable(num_points.numpy(), '../torch_paddle/paddle_var/num_points.txt')
+        # else:
+        #     save_variable(points.numpy(), '../torch_paddle/paddle_var/b_points.txt')
+        #     save_variable(voxels.numpy(), '../torch_paddle/paddle_var/b_voxels.txt')
+        #     save_variable(coors.numpy(), '../torch_paddle/paddle_var/b_coors.txt')
+        #     save_variable(num_points.numpy(), '../torch_paddle/paddle_var/b_num_points.txt')
 
         voxel_features = self.pts_voxel_encoder(voxels, num_points, coors)
-        save_variable(voxel_features.numpy(), '../torch_paddle/paddle_var/voxel_features.txt')
 
         batch_size = coors[-1, 0] + 1
         x = self.pts_middle_encoder(voxel_features, coors, batch_size.item())
-        save_variable(x.numpy(), '../torch_paddle/paddle_var/pts_middle_encoder.txt')
+        # if not self.training:
+        #     save_variable(x.numpy(), '../torch_paddle/paddle_var/pts_middle_encoder.txt')
+        # else:
+        #     save_variable(x.numpy(), '../torch_paddle/paddle_var/b_pts_middle_encoder.txt')
         x = self.pts_backbone(x)
-        for index, feat in enumerate(x):
-            if self.training:
-                save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_pts_backbone_{}.txt'.format(index))
-            else:
-                save_variable(feat.numpy(), '../torch_paddle/paddle_var/pts_backbone_{}.txt'.format(index))
+        # for index, feat in enumerate(x):
+        #     if self.training:
+        #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_pts_backbone_{}.txt'.format(index))
+        #     else:
+        #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/pts_backbone_{}.txt'.format(index))
         if self.with_pts_neck:
             x = self.pts_neck(x)
 
-        for index, feat in enumerate(x):
-            if self.training:
-                save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_pts_neck_{}.txt'.format(index))
-            else:
-                save_variable(feat.numpy(), '../torch_paddle/paddle_var/pts_neck_{}.txt'.format(index))
+        # for index, feat in enumerate(x):
+        #     if self.training:
+        #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/b_pts_neck_{}.txt'.format(index))
+        #     else:
+        #         save_variable(feat.numpy(), '../torch_paddle/paddle_var/pts_neck_{}.txt'.format(index))
 
         return x
 
@@ -241,14 +251,14 @@ class FUTR3D(BaseMultiViewModel):
                          img_feats=img_feats,
                          rad_feats=rad_feats,
                          img_metas=img_metas)
-        out_all_cls_scores = outs['all_cls_scores']
-        out_all_bbox_preds = outs['all_bbox_preds']
-        save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/b_out_all_cls_scores.txt')
-        save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/b_out_all_bbox_preds.txt')
+        # out_all_cls_scores = outs['all_cls_scores']
+        # out_all_bbox_preds = outs['all_bbox_preds']
+        # save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/b_out_all_cls_scores.txt')
+        # save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/b_out_all_bbox_preds.txt')
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs, gt_bboxes_ignore]
         losses = self.head.loss(*loss_inputs)
         loss = self._parse_loss(losses)
-        return losses
+        return loss
 
     def forward_mdfs_test(self,
                           pts_feats,
@@ -261,10 +271,10 @@ class FUTR3D(BaseMultiViewModel):
             rad_feats=rad_feats,
             img_metas=img_metas
         )
-        out_all_cls_scores = outs['all_cls_scores']
-        out_all_bbox_preds = outs['all_bbox_preds']
-        save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/out_all_cls_scores.txt')
-        save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/out_all_bbox_preds.txt')
+        # out_all_cls_scores = outs['all_cls_scores']
+        # out_all_bbox_preds = outs['all_bbox_preds']
+        # save_variable(out_all_cls_scores.numpy(), '../torch_paddle/paddle_var/out_all_cls_scores.txt')
+        # save_variable(out_all_bbox_preds.numpy(), '../torch_paddle/paddle_var/out_all_bbox_preds.txt')
         bbox_list = self.head.get_bboxes(outs, img_metas)
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)
@@ -294,20 +304,18 @@ class FUTR3D(BaseMultiViewModel):
         # save_variable(voxels.numpy(), 'voxels.txt')
         # save_variable(coords.numpy(), 'coords.txt')
         # save_variable(num_points_per_voxel.numpy(), 'num_points_per_voxel.txt')
-
-
-        points = paddle.to_tensor(load_variavle('points.txt'))
-        voxels = paddle.to_tensor(load_variavle('voxels.txt'))
-        coords = paddle.to_tensor(load_variavle('coords.txt'))
-        num_points_per_voxel = paddle.to_tensor(load_variavle('num_points_per_voxel.txt'))
-        input_points = [points, voxels, coords, num_points_per_voxel]
-        img = paddle.to_tensor(load_variavle('img.txt'))
-        gt_bboxes_3d = paddle.to_tensor(load_variavle('gt_bboxes_3d.txt'))
-        gt_labels_3d = paddle.to_tensor(load_variavle('gt_labels_3d.txt'))
-        img_metas = load_variavle('img_metas.txt')
-        lidar2img = img_metas[0]['lidar2img']
-        for i in range(len(lidar2img)):
-            img_metas[0]['lidar2img'][i] = paddle.to_tensor(img_metas[0]['lidar2img'][i])
+        # points = paddle.to_tensor(load_variavle('points.txt'))
+        # voxels = paddle.to_tensor(load_variavle('voxels.txt'))
+        # coords = paddle.to_tensor(load_variavle('coords.txt'))
+        # num_points_per_voxel = paddle.to_tensor(load_variavle('num_points_per_voxel.txt'))
+        # input_points = [points, voxels, coords, num_points_per_voxel]
+        # img = paddle.to_tensor(load_variavle('img.txt'))
+        # gt_bboxes_3d = paddle.to_tensor(load_variavle('gt_bboxes_3d.txt'))
+        # gt_labels_3d = paddle.to_tensor(load_variavle('gt_labels_3d.txt'))
+        # img_metas = load_variavle('img_metas.txt')
+        # lidar2img = img_metas[0]['lidar2img']
+        # for i in range(len(lidar2img)):
+        #     img_metas[0]['lidar2img'][i] = paddle.to_tensor(img_metas[0]['lidar2img'][i])
 
         pts_feats, img_feats, rad_feats = self.extract_feat(points=input_points, img=img, radar=radar, img_metas=img_metas)
         if self.use_LiDAR:
@@ -337,8 +345,8 @@ class FUTR3D(BaseMultiViewModel):
             input_points = [points, voxels, coords, num_points_per_voxel]
         else:
             input_points = None
-        save_variable(img.numpy(), '../torch_paddle/paddle_var/img.txt')
-        save_variable(points.numpy(), '../torch_paddle/paddle_var/points.txt')
+        # save_variable(img.numpy(), '../torch_paddle/paddle_var/img.txt')
+        # save_variable(points.numpy(), '../torch_paddle/paddle_var/points.txt')
 
         pts_feats, img_feats, rad_feats = self.extract_feat(points=input_points, img=img, radar=radar, img_metas=img_metas)
         if self.use_LiDAR:

@@ -33,7 +33,7 @@ from paddle3d.utils import box_utils
 
 __all__ = [
     "RandomHorizontalFlip", "RandomVerticalFlip", "GlobalRotate", "GlobalScale",
-    "GlobalTranslate", "ShufflePoint", "SamplePoint", "SamplePointByVoxels",
+    "GlobalTranslate", "ShufflePoint", "PointShuffle", "SamplePoint", "SamplePointByVoxels",
     "FilterPointOutsideRange", "FilterBBoxOutsideRange", "HardVoxelize", 'PointsRangeFilter',
     "RandomObjectPerturb", "ConvertBoxFormat", "ResizeShortestEdge", 'ResizeMultiImage', 'PhotoMetricDistortionMultiViewImage', 'fixed_PhotoMetricDistortionMultiViewImage',
     "RandomContrast", "RandomBrightness", "RandomSaturation", "ToVisionBasedBox"
@@ -253,6 +253,12 @@ class ShufflePoint(TransformABC):
         if sample.modality != "lidar":
             raise ValueError("ShufflePoint only supports lidar data!")
         sample.data.shuffle()
+        return sample
+
+@manager.TRANSFORMS.add_component
+class PointShuffle(TransformABC):
+    def __call__(self, sample: Sample):
+        sample.points = np.random.permutation(sample.points)
         return sample
 
 

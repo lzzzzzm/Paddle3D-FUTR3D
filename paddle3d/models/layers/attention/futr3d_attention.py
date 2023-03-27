@@ -59,23 +59,24 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # ref_point_cam change to img coordinates
     reference_points_cam = reference_points_cam[..., 0:2] / paddle.maximum(
         reference_points_cam[..., 2:3], paddle.ones_like(reference_points_cam[..., 2:3]) * eps)
+    reference_points_cam_clone = reference_points_cam.clone()
     # img_metas['img_shape']=[900, 1600]
-    reference_points_cam[..., 0] =  reference_points_cam[..., 0] / img_metas[0]['img_shape'][0][1]
-    reference_points_cam[..., 1] =  reference_points_cam[..., 1] / img_metas[0]['img_shape'][0][0]
-    reference_points_cam = (reference_points_cam - 0.5) * 2
-    mask = (mask & (reference_points_cam[..., 0:1] > -1.0)
-                 & (reference_points_cam[..., 0:1] < 1.0)
-                 & (reference_points_cam[..., 1:2] > -1.0)
-                 & (reference_points_cam[..., 1:2] < 1.0))
+    reference_points_cam_clone[..., 0] /= img_metas[0]['img_shape'][0][1]
+    reference_points_cam_clone[..., 1] /= img_metas[0]['img_shape'][0][0]
+    reference_points_cam_clone = (reference_points_cam_clone - 0.5) * 2
+    mask = (mask & (reference_points_cam_clone[..., 0:1] > -1.0)
+                 & (reference_points_cam_clone[..., 0:1] < 1.0)
+                 & (reference_points_cam_clone[..., 1:2] > -1.0)
+                 & (reference_points_cam_clone[..., 1:2] < 1.0))
     mask = mask.reshape((B, num_cam, 1, num_query, 1, 1)).transpose((0, 2, 3, 1, 4, 5))
+
     # TODO
     # mask = nan_to_num(mask)
-    reference_points_cam = paddle.to_tensor(reference_points_cam)
     sampled_feats = []
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.shape
         feat = feat.reshape((B*N, C, H, W))
-        reference_points_cam_lvl = reference_points_cam.reshape((B*N, int(num_query/10), 10, 2))
+        reference_points_cam_lvl = reference_points_cam_clone.reshape((B*N, int(num_query/10), 10, 2))
         sampled_feat = F.grid_sample(feat, reference_points_cam_lvl, align_corners=False)
         sampled_feat = sampled_feat.reshape((B, N, C, num_query, 1)).transpose((0, 2, 3, 1, 4))
         sampled_feats.append(sampled_feat)
@@ -100,10 +101,6 @@ def feature_sampling_3D(points_feats, reference_points, pc_range):
 
     reference_points_rel[..., 0] = reference_points[..., 0] / pc_range[3]
     reference_points_rel[..., 1] = reference_points[..., 1] / pc_range[4]
-    # reference_points_rel = paddle.to_tensor(reference_points_rel, dtype=reference_points.dtype)
-    # mlvl_feats = []
-    # for i in range(len(points_feats)):
-    #     mlvl_feats.append(paddle.to_tensor(points_feats[i], dtype=points_feats[i].dtype))
     sampled_feats = []
     num_points = 1
     for lvl, feat in enumerate(points_feats):
@@ -253,7 +250,6 @@ class FUTR3DCrossAtten(nn.Layer):
             img_attention_weights = self.attention_weights(query).reshape((
                 bs, 1, num_query, self.num_cams, self.num_points, self.num_levels
             ))
-
             reference_points_3d, img_output, mask = feature_sampling(
                 value, reference_points, self.pc_range, kwargs['img_metas'])
 

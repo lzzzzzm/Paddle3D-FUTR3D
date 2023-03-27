@@ -215,6 +215,7 @@ class LoadPointsFromFile(TransformABC):
         Returns:
             np.ndarray: An array containing point clouds data.
         """
+        pts_filename = pts_filename.replace('\\', '/')
         points = np.fromfile(pts_filename, np.float32)
         return points
 
@@ -312,6 +313,7 @@ class LoadPointsFromMultiSweeps(object):
         Returns:
             np.ndarray: An array containing point clouds data.
         """
+        pts_filename = pts_filename.replace('\\', '/')
         points = np.fromfile(pts_filename, np.float32)
         return points
 
@@ -368,7 +370,7 @@ class LoadPointsFromMultiSweeps(object):
             else:
                 choices = np.random.choice(
                     len(results['sweeps']), self.sweeps_num, replace=False)
-                choices = np.array([5, 7, 3, 8, 2, 1, 6, 9, 0])
+                # choices = np.array([5, 7, 3, 8, 2, 1, 6, 9, 0])
             for idx in choices:
                 sweep = results['sweeps'][idx]
                 points_sweep = self._load_points(sweep['data_path'])

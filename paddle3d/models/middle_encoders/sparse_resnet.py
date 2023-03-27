@@ -97,52 +97,56 @@ class SparseResNet3D(paddle.nn.Layer):
     def __init__(self,
                  in_channels=128,
                  voxel_size=(0.2, 0.2, 4),
-                 point_cloud_range=(0, -40, -3, 70.4, 40, 1)):
+                 point_cloud_range=(0, -40, -3, 70.4, 40, 1),
+                 norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),
+                 block_bias_attr=True):
         super(SparseResNet3D, self).__init__()
 
         self.zero_init_residual = False
-
+        norm_cfg['eps'] = float(norm_cfg['eps'])
+        norm_cfg['momentum'] = float(norm_cfg['momentum'])
         # input: # [1600, 1200, 41]
         self.conv_input = paddle.nn.Sequential(
             nn.SubmConv3D(in_channels, 16, 3, bias_attr=False),
-            nn.BatchNorm(16, epsilon=1e-3, momentum=0.01), nn.ReLU())
+            nn.BatchNorm(16, epsilon=norm_cfg['eps'], momentum=norm_cfg['momentum']),
+            nn.ReLU())
 
         self.conv1 = paddle.nn.Sequential(
-            SparseBasicBlock(16, 16),
-            SparseBasicBlock(16, 16),
+            SparseBasicBlock(16, 16, bias_attr=block_bias_attr),
+            SparseBasicBlock(16, 16, bias_attr=block_bias_attr),
         )
 
         self.conv2 = paddle.nn.Sequential(
             nn.Conv3D(16, 32, 3, 2, padding=1,
                       bias_attr=False),  # [1600, 1200, 41] -> [800, 600, 21]
-            nn.BatchNorm(32, epsilon=1e-3, momentum=0.01),
+            nn.BatchNorm(32, epsilon=norm_cfg['eps'], momentum=norm_cfg['momentum']),
             nn.ReLU(),
-            SparseBasicBlock(32, 32),
-            SparseBasicBlock(32, 32),
+            SparseBasicBlock(32, 32, bias_attr=block_bias_attr),
+            SparseBasicBlock(32, 32, bias_attr=block_bias_attr),
         )
 
         self.conv3 = paddle.nn.Sequential(
             nn.Conv3D(32, 64, 3, 2, padding=1,
                       bias_attr=False),  # [800, 600, 21] -> [400, 300, 11]
-            nn.BatchNorm(64, epsilon=1e-3, momentum=0.01),
+            nn.BatchNorm(64, epsilon=norm_cfg['eps'], momentum=norm_cfg['momentum']),
             nn.ReLU(),
-            SparseBasicBlock(64, 64),
-            SparseBasicBlock(64, 64),
+            SparseBasicBlock(64, 64, bias_attr=block_bias_attr),
+            SparseBasicBlock(64, 64, bias_attr=block_bias_attr),
         )
 
         self.conv4 = paddle.nn.Sequential(
             nn.Conv3D(64, 128, 3, 2, padding=[0, 1, 1],
                       bias_attr=False),  # [400, 300, 11] -> [200, 150, 5]
-            nn.BatchNorm(128, epsilon=1e-3, momentum=0.01),
+            nn.BatchNorm(128, epsilon=norm_cfg['eps'], momentum=norm_cfg['momentum']),
             nn.ReLU(),
-            SparseBasicBlock(128, 128),
-            SparseBasicBlock(128, 128),
+            SparseBasicBlock(128, 128, bias_attr=block_bias_attr),
+            SparseBasicBlock(128, 128, bias_attr=block_bias_attr),
         )
 
         self.extra_conv = paddle.nn.Sequential(
             nn.Conv3D(128, 128, (3, 1, 1), (2, 1, 1),
                       bias_attr=False),  # [200, 150, 5] -> [200, 150, 2]
-            nn.BatchNorm(128, epsilon=1e-3, momentum=0.01),
+            nn.BatchNorm(128, epsilon=norm_cfg['eps'], momentum=norm_cfg['momentum']),
             nn.ReLU(),
         )
 

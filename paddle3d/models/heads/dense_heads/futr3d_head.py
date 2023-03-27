@@ -193,6 +193,9 @@ class DeformableFUTR3DHead(nn.Layer):
             reg_branches=self.reg_branches if self.with_box_refine else None,
             img_metas=img_metas
         )
+        # save_variable(hs.numpy(), '../torch_paddle/paddle_var/hs.txt')
+        # save_variable(init_reference.numpy(), '../torch_paddle/paddle_var/init_reference.txt')
+        # save_variable(inter_references.numpy(), '../torch_paddle/paddle_var/inter_references.txt')
         hs = paddle.transpose(hs, (0, 2, 1, 3))
         outputs_classes = []
         outputs_coords = []

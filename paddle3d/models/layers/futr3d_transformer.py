@@ -253,6 +253,7 @@ class FUTR3DTransformerDecoder(TransformerLayerSequence):
                            reference_points=reference_points_input,
                            *args,
                            **kwargs)
+            # save_variable(output.numpy(), '../torch_paddle/paddle_var/output_{}.txt'.format(lid))
             output = paddle.transpose(output, (1, 0, 2))
             if reg_branches is not None:
                 tmp = reg_branches[lid](output)
