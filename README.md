@@ -2,6 +2,10 @@
 
 本项目基于Paddle3D套件，复现论文FUTR3D。在Aistudio上有对Mini数据集的代码使用：[AiStudio项目连接](https://aistudio.baidu.com/aistudio/projectdetail/5739205)
 
+数据集中用到的pkl文件以及预训练、初始化权重在百度网盘：
+
+**链接：https://pan.baidu.com/s/1CwmILXbDj0vrJSPkK3z_UA 
+提取码：i3sw**
 
 ## 数据集准备
 
@@ -62,6 +66,6 @@ barrier	0.000	1.000	1.000	1.000	nan	nan
 
 ```
 cd Paddle3D-FUTR3D
-python tools/evaluate.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams --save_interval 1
+python tools/train.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams --save_interval 1
 ```
 
