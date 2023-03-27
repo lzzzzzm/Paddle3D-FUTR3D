@@ -62,6 +62,6 @@ barrier	0.000	1.000	1.000	1.000	nan	nan
 
 ```
 cd Paddle3D-FUTR3D
-python tools/evaluate.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams
+python tools/evaluate.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams --save_interval 1
 ```
 
