@@ -5,7 +5,7 @@ train_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
   ann_file: data/nuscenes/nuscenes_infos_train.pkl
-  mode: train
+  mode: mini_train
   class_names: [
       'car', 'truck', 'construction_vehicle', 'bus', 'trailer',
       'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
@@ -22,7 +22,8 @@ train_dataset:
       remove_close: True
     - type: LoadMultiViewImageFromFiles
       to_float32: True
-    - type: PhotoMetricDistortionMultiViewImage
+    - type: fixed_PhotoMetricDistortionMultiViewImage
+    - type: ResizeMultiImage
     - type: LoadAnnotations3D
       with_bbox_3d: True
       with_label_3d: True
@@ -54,7 +55,7 @@ val_dataset:
   type: NuscenesMVDataset
   dataset_root: data/nuscenes/
   ann_file: data/nuscenes/nuscenes_infos_val.pkl
-  mode: val
+  mode: mini_val
   class_names: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer',
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']
@@ -75,6 +76,7 @@ val_dataset:
       max_voxel_num: 120000
     - type: LoadMultiViewImageFromFiles
       to_float32: True
+    - type: ResizeMultiImage
     - type: NormalizeMultiviewImage
       mean: [103.530, 116.280, 123.675]
       std: [1.0, 1.0, 1.0]
@@ -88,7 +90,7 @@ model:
   use_LiDAR: True
   use_Radar: False
   use_Cam: True
-  use_grid_mask: True
+  use_grid_mask: False
   backbone:
     type: ResNet
     style: 'caffe'
@@ -162,7 +164,7 @@ model:
             - type: MultiHeadAttention
               embed_dims: 256
               num_heads: 8
-              attn_drop: 0.1
+              attn_drop: 0.0
             - type: FUTR3DCrossAtten
               use_LiDAR: True
               use_Radar: False
@@ -172,9 +174,9 @@ model:
               use_level_cam_embed: True
               num_points: 1
               embed_dims: 256
-              dropout: 0.1
+              dropout: 0.0
           feedforward_channels: 512
-          ffn_dropout: 0.1
+          ffn_dropout: 0.0
           operation_order: ['self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm']
     bbox_coder:
       type: NMSFreeCoder
@@ -196,11 +198,7 @@ model:
 
 
 optimizer:
-  type: AdamW
-  weight_decay: 0.01
-  grad_clip:
-    type: ClipGradByGlobalNorm
-    clip_norm: 35
+  type: Momentum
 
 
 lr_scheduler:

@@ -1,5 +1,5 @@
 batch_size: 1
-epochs: 3
+epochs: 24
 
 train_dataset:
   type: NuscenesMVDataset
@@ -11,23 +11,13 @@ train_dataset:
       'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
   ]
   transforms:
-    - type: LoadPointsFromFile
-      coord_type: 'LIDAR'
-      load_dim: 5
-      use_dim: 5
-    - type: LoadPointsFromMultiSweeps
-      sweeps_num: 9
-      use_dim: [ 0, 1, 2, 3, 4 ]
-      pad_empty_sweeps: True
-      remove_close: True
     - type: LoadMultiViewImageFromFiles
       to_float32: True
-    - type: PhotoMetricDistortionMultiViewImage
+#    - type: PhotoMetricDistortionMultiViewImage
+    - type: ResizeMultiImage
     - type: LoadAnnotations3D
       with_bbox_3d: True
       with_label_3d: True
-    - type: PointsRangeFilter
-      point_cloud_range: [ -51.2, -51.2, -5.0, 51.2, 51.2, 3.0 ]
     - type: SampleRangeFilter
       point_cloud_range: [ -51.2, -51.2, -5.0, 51.2, 51.2, 3.0 ]
     - type: SampleNameFilter
@@ -40,14 +30,8 @@ train_dataset:
       std: [1.0, 1.0, 1.0]
     - type: PadMultiViewImage
       size_divisor: 32
-    - type: PointShuffle
-    - type: HardVoxelize
-      point_cloud_range: [ -51.2, -51.2, -5.0, 51.2, 51.2, 3.0 ]
-      voxel_size: [ 0.1, 0.1, 0.2 ]
-      max_points_in_voxel: 10
-      max_voxel_num: 90000
     - type: SampleFilerByKey
-      keys: [ 'gt_bboxes_3d', 'gt_labels_3d','img', 'points', 'voxels', 'coords', 'num_points_per_voxel']
+      keys: [ 'gt_bboxes_3d', 'gt_labels_3d','img']
 
 
 val_dataset:
@@ -59,36 +43,23 @@ val_dataset:
                     'barrier', 'motorcycle', 'bicycle', 'pedestrian',
                     'traffic_cone']
   transforms:
-    - type: LoadPointsFromFile
-      coord_type: 'LIDAR'
-      load_dim: 5
-      use_dim: 5
-    - type: LoadPointsFromMultiSweeps
-      sweeps_num: 9
-      use_dim: [0, 1, 2, 3, 4]
-      pad_empty_sweeps: True
-      remove_close: True
-    - type: HardVoxelize
-      point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-      voxel_size: [0.1, 0.1, 0.2]
-      max_points_in_voxel: 10
-      max_voxel_num: 120000
     - type: LoadMultiViewImageFromFiles
       to_float32: True
+    - type: ResizeMultiImage
     - type: NormalizeMultiviewImage
       mean: [103.530, 116.280, 123.675]
       std: [1.0, 1.0, 1.0]
     - type: PadMultiViewImage
       size_divisor: 32
     - type: SampleFilerByKey
-      keys: ['img', 'points', 'voxels', 'coords', 'num_points_per_voxel']
+      keys: ['img']
 
 model:
   type: FUTR3D
-  use_LiDAR: True
+  use_LiDAR: False
   use_Radar: False
   use_Cam: True
-  use_grid_mask: True
+  use_grid_mask: False
   backbone:
     type: ResNet
     style: 'caffe'
@@ -109,36 +80,9 @@ model:
     add_extra_convs: 'on_output'
     num_outs: 4
     relu_before_extra_convs: True
-    norm_cfg: {'eps':1e-5, 'momentum': 0.1}
-    with_conv_bias: False
-  pts_voxel_encoder:
-    type: VoxelMean
-    in_channels: 5
-  pts_middle_encoder:
-    type: SparseResNet3D
-    in_channels: 5
-    voxel_size: [ 0.1, 0.1, 0.2 ]
-    point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-    norm_cfg: {'eps':1e-3, 'momentum': 0.99}
-    block_bias_attr: False
-  pts_backbone:
-    type: SecondBackbone
-    in_channels: 256
-    out_channels: [128, 256]
-    layer_nums: [5, 5]
-    downsample_strides: [1, 2]
-  pts_neck:
-    type: FUTR3D_FPN
-    in_channels: [128, 256]
-    out_channels: 256
-    start_level: 0
-    num_outs: 4
-    norm_cfg: {'eps':1e-3, 'momentum': 0.01}
-    with_conv_bias: False
-    with_activation: True
   head:
     type: DeformableFUTR3DHead
-    num_query: 600
+    num_query: 900
     num_classes: 10
     in_channels: 256
     embed_dims: 256
@@ -155,16 +99,16 @@ model:
       decoder:
         type: FUTR3DTransformerDecoder
         return_intermediate: True
-        num_layers: 6
+        num_layers: 1
         transformerlayers:
           type: DetrTransformerDecoderLayer
           attns:
             - type: MultiHeadAttention
               embed_dims: 256
               num_heads: 8
-              attn_drop: 0.1
+              attn_drop: 0.0
             - type: FUTR3DCrossAtten
-              use_LiDAR: True
+              use_LiDAR: False
               use_Radar: False
               use_Cam: True
               pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
@@ -172,16 +116,16 @@ model:
               use_level_cam_embed: True
               num_points: 1
               embed_dims: 256
-              dropout: 0.1
+              dropout: 0.0
           feedforward_channels: 512
-          ffn_dropout: 0.1
+          ffn_dropout: 0.0
           operation_order: ['self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm']
     bbox_coder:
       type: NMSFreeCoder
       post_center_range: [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0]
       pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
       max_num: 300
-      voxel_size: [0.1, 0.1, 0.2]
+      voxel_size: [0.2, 0.2, 8]
       num_classes: 10
     loss_cls:
       type: WeightedFocalLoss
@@ -196,19 +140,16 @@ model:
 
 
 optimizer:
-  type: AdamW
-  weight_decay: 0.01
-  grad_clip:
-    type: ClipGradByGlobalNorm
-    clip_norm: 35
+  type: Momentum
 
 
 lr_scheduler:
   type: LinearWarmup
   learning_rate:
-    type: MultiStepDecayByEpoch
+    type: CosineAnnealingDecayByEpoch
     learning_rate: 0.0002
-    milestones: [2]
+    T_max: 24
+    eta_min: 0.0000002
   warmup_steps: 500
   start_lr: 0.00006666666
   end_lr: 0.0002
