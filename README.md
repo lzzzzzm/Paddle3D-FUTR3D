@@ -33,7 +33,7 @@ python setup.py install --user
 cd Paddle3D-FUTR3D
 python tools/evaluate.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_pretrained.pdparams
 ```
-在Nuscenes-Mini上的推理结果如下
+在Nuscenes-Mini上的推理结果如下（PS：NDS指标在MINI数据集上的结果有偏高，但在全量数据集上没有测试问题）
 ```
 mAP: 0.5709                                                                     
 mATE: 0.4564
