@@ -62,10 +62,38 @@ traffic_cone	0.866	0.178	0.288	nan	nan	nan
 barrier	0.000	1.000	1.000	1.000	nan	nan
 ```
 
-## 训练代码
+在Nuscenes全量数据集上的推理结果如下：
+```
+mAP: 0.6383                                                                                                                                                                                
+mATE: 0.3494
+mASE: 0.2586
+mAOE: 0.2799
+mAVE: 0.2985
+mAAE: 0.1844
+NDS: 0.6821
+Eval time: 211.4s
+
+Per-class results:
+Object Class    AP      ATE     ASE     AOE     AVE     AAE
+car     0.866   0.183   0.146   0.052   0.305   0.199
+truck   0.605   0.365   0.191   0.074   0.279   0.220
+bus     0.712   0.362   0.180   0.044   0.580   0.216
+trailer 0.408   0.614   0.205   0.450   0.232   0.174
+construction_vehicle    0.255   0.819   0.459   1.006   0.133   0.304
+pedestrian      0.827   0.202   0.291   0.340   0.229   0.106
+motorcycle      0.717   0.237   0.254   0.231   0.404   0.247
+bicycle 0.641   0.189   0.260   0.264   0.226   0.009
+traffic_cone    0.697   0.212   0.313   nan     nan     nan
+barrier 0.657   0.312   0.287   0.057   nan     nan
+```
+
+## 模型训练
+
+**其中config文件中的训练配置8卡配置**
 
 ```
 cd Paddle3D-FUTR3D
 python tools/train.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams --save_interval 1
 ```
 
+全量数据集复现结果：
