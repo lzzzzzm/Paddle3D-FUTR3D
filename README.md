@@ -87,13 +87,20 @@ traffic_cone    0.697   0.212   0.313   nan     nan     nan
 barrier 0.657   0.312   0.287   0.057   nan     nan
 ```
 
-## 模型训练
+## 单卡训练
 
-**其中config文件中的训练配置8卡配置**
+**其中config文件中的训练配置8卡配置，如使用单卡训练，需要相应调整学习率和warmup参数**
 
 ```
 cd Paddle3D-FUTR3D
 python tools/train.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams --save_interval 1
+```
+
+## 多卡训练
+
+```
+cd Paddle3D-FUTR3D
+python -m paddle.distributed.launch tools/train.py --config configs/futr3d/futr3d_cam_lidar.yml --model cam_lidar_init.pdparams --save_interval 1
 ```
 
 全量数据集复现结果：
